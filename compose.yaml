@@ -1,0 +1,18 @@
+services:
+  backend:
+    image: prod
+
+  db:
+    image: postgres
+    restart: always
+    shm_size: 128mb
+    environment:
+      POSTGRES_PASSWORD: testing_password
+    
+volumes:
+  db-data:
+    driver: flocker
+    driver_opts:
+      size: "1 GiB"
+
+
