@@ -1,0 +1,8 @@
+{
+    "name": "devcontainer",
+    "build": {
+        "dockerfile": "../devcontainer.Dockerfile"
+    },
+    "workspaceFolder": "/workspaces/project",
+    "remoteUser": "root"
+}
