@@ -3,6 +3,6 @@
     "build": {
         "dockerfile": "Dockerfile"
     },
-    "workspaceFolder": "/workspaces/project",
+    "workspaceFolder": "/workspaces/job-queue-manager",
     "remoteUser": "root"
 }
