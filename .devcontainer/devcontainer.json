@@ -1,13 +1,93 @@
 {
-    "name": "devcontainer",
-    "build": {
-        "dockerfile": "Dockerfile"
+  "name": "job-queue-manager",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:22",
+
+  "features": {
+    "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
+      "version": "latest",
+      "helm": "none",
+      "minikube": "none"
     },
-    "workspaceFolder": "/workspaces/job-queue-manager",
-    "remoteUser": "root",
-    "features": {
-        "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
-            "moby": false
-        }
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "22",
+      "nodeGypDependencies": true
     }
+  },
+
+  "containerEnv": {
+    "KUBECONFIG": "/workspaces/job-queue-manager/discovery.yaml",
+    "NODE_ENV": "development"
+  },
+
+  // Install pnpm globally, then install all workspace dependencies from root
+  "postCreateCommand": "npm install -g pnpm && pnpm install",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        // TypeScript & JS
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-vscode.vscode-typescript-next",
+
+        // AdonisJS
+        "jripouteau.adonis-vscode-extension",
+
+        // Nuxt 4 / Vue
+        "Vue.volar",
+        "nuxt.mdc",
+
+        // Kubernetes
+        "ms-kubernetes-tools.vscode-kubernetes-tools",
+
+        // PostgreSQL
+        "mtxr.sqltools",
+        "mtxr.sqltools-driver-pg",
+
+        // Monorepo / general DX
+        "usernamehw.errorlens",
+        "streetsidesoftware.code-spell-checker"
+      ],
+      "settings": {
+        // Use workspace TypeScript version (important for monorepo)
+        "typescript.tsdk": "node_modules/typescript/lib",
+        "typescript.enablePromptUseWorkspaceTsdk": true,
+
+        // Editor
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": "explicit"
+        },
+
+        // Vue / Nuxt — Volar hybrid mode for Nuxt 4
+        "vue.server.hybridMode": true,
+
+        // Terminal
+        "terminal.integrated.defaultProfile.linux": "bash",
+
+        // Enforce pnpm — prevents accidental npm/yarn usage in monorepo
+        "npm.packageManager": "pnpm"
+      }
+    }
+  },
+
+  // Nuxt frontend (3000), AdonisJS backend (3333), Postgres tunnel (5432)
+  "forwardPorts": [3000, 3333, 5432],
+  "portsAttributes": {
+    "3000": {
+      "label": "Nuxt Frontend",
+      "onAutoForward": "openBrowser"
+    },
+    "3333": {
+      "label": "AdonisJS Backend",
+      "onAutoForward": "notify"
+    },
+    "5432": {
+      "label": "Postgres (kubectl port-forward)",
+      "onAutoForward": "silent"
+    }
+  },
+
+  "remoteUser": "node"
 }
