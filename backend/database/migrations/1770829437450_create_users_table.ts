@@ -1,21 +1,23 @@
-import { BaseSchema } from '@adonisjs/lucid/schema'
+// THIS IS A DUMMY FILE
 
-export default class extends BaseSchema {
-  protected tableName = 'TESTINGusers'
+// import { BaseSchema } from '@adonisjs/lucid/schema'
 
-  async up() {
-    this.schema.createTable(this.tableName, (table) => {
-      table.increments('id').notNullable()
-      table.string('full_name').nullable()
-      table.string('email', 254).notNullable().unique()
-      table.string('password').notNullable()
+// export default class extends BaseSchema {
+//   protected tableName = 'TESTINGusers'
 
-      table.timestamp('created_at').notNullable()
-      table.timestamp('updated_at').nullable()
-    })
-  }
+//   async up() {
+//     this.schema.createTable(this.tableName, (table) => {
+//       table.increments('id').notNullable()
+//       table.string('full_name').nullable()
+//       table.string('email', 254).notNullable().unique()
+//       table.string('password').notNullable()
 
-  async down() {
-    this.schema.dropTable(this.tableName)
-  }
-}
+//       table.timestamp('created_at').notNullable()
+//       table.timestamp('updated_at').nullable()
+//     })
+//   }
+
+//   async down() {
+//     this.schema.dropTable(this.tableName)
+//   }
+// }
