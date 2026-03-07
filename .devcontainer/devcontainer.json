@@ -40,6 +40,9 @@
         // Kubernetes
         "ms-kubernetes-tools.vscode-kubernetes-tools",
 
+        //Git
+        "eamodio.gitlens",
+
         // PostgreSQL
         "mtxr.sqltools",
         "mtxr.sqltools-driver-pg",
