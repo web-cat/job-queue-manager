@@ -4,5 +4,10 @@
         "dockerfile": "Dockerfile"
     },
     "workspaceFolder": "/workspaces/job-queue-manager",
-    "remoteUser": "root"
+    "remoteUser": "root",
+    "features": {
+        "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+            "moby": false
+        }
+    }
 }
