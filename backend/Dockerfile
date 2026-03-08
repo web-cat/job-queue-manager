@@ -1,13 +1,17 @@
-FROM node:trixie
+FROM node:24-trixie-slim AS build
+WORKDIR /app
 
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends git ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
+COPY package*.json ./
+RUN npm ci
 
-RUN npm install -g @adonisjs/cli
+COPY . .
+RUN node ace build 
 
-WORKDIR /workspaces/project
+FROM node:24-trixie-slim
+WORKDIR /app
 
-CMD ["bash"]
+COPY --from=build /app/build ./
+RUN npm ci --omit=dev
+EXPOSE 3333
 
-
+CMD ["node", "bin/server.js"]
