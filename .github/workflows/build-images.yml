@@ -48,6 +48,7 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           push: true
+          provenance: false
           tags: |
-            container.cs.vt.edu/timwilson/job-queue-manager-images:prod_latest
-            container.cs.vt.edu/timwilson/job-queue-manager-images:v${{ steps.version.outputs.version }}
+            container.cs.vt.edu/timwilson/job-queue-manager-images/backend:prod_latest
+            container.cs.vt.edu/timwilson/job-queue-manager-images/backend:v${{ steps.version.outputs.version }}
