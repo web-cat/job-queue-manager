@@ -1,4 +1,4 @@
-name: Auto-push images on commit to main 
+name: Auto-push images on commit to main
 
 on:
   push:
@@ -23,14 +23,13 @@ jobs:
           major_pattern: "(?i)Major|!:"
           minor_pattern: "(?i)Feature"
           version_format: "${major}.${minor}.${patch}"
-        
+
       - name: git tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -f "v${{ steps.version.outputs.version }}"
           git push origin "v${{ steps.version.outputs.version }}" --force
-
 
       - name: docker buildx
         uses: docker/setup-buildx-action@v3
