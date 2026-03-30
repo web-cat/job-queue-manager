@@ -246,6 +246,7 @@ export default class extends BaseSchema {
       table.increments('id')
       table.integer('workout_id').notNullable().references('id').inTable('assignment')
       table.integer('user_id').notNullable().references('id').inTable('user')
+      table.string('file_path', 255).nullable()
       table.double('score').nullable()
       table
         .integer('assignment_offering_id')

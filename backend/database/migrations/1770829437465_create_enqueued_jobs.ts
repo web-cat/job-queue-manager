@@ -8,28 +8,12 @@ export default class extends BaseSchema {
     this.schema.createTable('enqueued_job', (table) => {
       table.integer('id').primary()
       table.integer('submission_id').notNullable().references('id').inTable('submission')
-      table.integer('worker_id').nullable()
+      table.string('pod_name', 255).nullable()
       table.smallint('priority').nullable()
-      table.boolean('discarded').notNullable()
-      table.boolean('suspended').notNullable()
       table.timestamp('queue_time').nullable()
-
-      // TODO: Confirm with other team — what worker tag format do they expect?
-      // e.g. 'python3', 'java11', 'c-gcc' etc.
-      // table.string('worker_tag', 255).nullable()
-
-      // TODO: Confirm with other team — do they need a status field?
-      // e.g. 'pending', 'running', 'completed', 'failed'
-      // table.string('status', 50).notNullable().defaultTo('pending')
-
-      // TODO: Confirm with other team — do they write results back here
-      // or directly to submission_result?
-      // table.jsonb('result').nullable()
-
-      // TODO: File storage — where does the submitted zip path live?
-      // Option A: on submission table
-      // Option B: on enqueued_job as a reference
-      // table.string('file_path', 255).nullable()
+      table.string('container_image', 255).nullable()
+      table.string('status', 50).notNullable().defaultTo('pending')
+      table.jsonb('result').nullable()
     })
   }
 
