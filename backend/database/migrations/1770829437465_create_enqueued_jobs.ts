@@ -10,9 +10,13 @@ export default class extends BaseSchema {
       table.integer('submission_id').notNullable().references('id').inTable('submission')
       table.string('pod_name', 255).nullable()
       table.smallint('priority').nullable()
+      table.timestamp('started_at').nullable()
       table.timestamp('queue_time').nullable()
+      table.timestamp('completed_at').nullable()
       table.string('container_image', 255).nullable()
+      table.jsonb('env_vars').nullable()
       table.string('status', 50).notNullable().defaultTo('pending')
+      table.integer('retry_count').defaultTo(0)
       table.jsonb('result').nullable()
     })
   }
