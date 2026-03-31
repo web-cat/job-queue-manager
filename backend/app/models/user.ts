@@ -1,20 +1,23 @@
 import { DateTime } from 'luxon'
 import hash from '@adonisjs/core/services/hash'
 import { compose } from '@adonisjs/core/helpers'
-import { BaseModel, column } from '@adonisjs/lucid/orm'
+import { BaseModel, column, belongsTo, hasMany } from '@adonisjs/lucid/orm'
 import { withAuthFinder } from '@adonisjs/auth/mixins/lucid'
 import { DbAccessTokensProvider } from '@adonisjs/auth/access_tokens'
-
-export type UserRole = 'admin' | 'viewer'
-export type AuthProvider = 'local' | 'google' | 'github' | 'cas'
+import type { BelongsTo, HasMany } from '@adonisjs/lucid/types/relations'
+import GlobalRole from './global_role.js'
+import TimeZone from './time_zone.js'
+import Submission from './submission.js'
+import Identity from './identity.js'
+import LtiIdentity from './lti_identity.js'
 
 const AuthFinder = withAuthFinder(() => hash.use('scrypt'), {
   uids: ['email'],
-  passwordColumnName: 'password',
+  passwordColumnName: 'encrypted_password',
 })
 
 export default class User extends compose(BaseModel, AuthFinder) {
-  static table = 'users'
+  static table = 'user'
 
   @column({ isPrimary: true })
   declare id: number
@@ -23,23 +26,61 @@ export default class User extends compose(BaseModel, AuthFinder) {
   declare email: string
 
   @column({ serializeAs: null })
-  declare password: string | null
+  declare encryptedPassword: string
 
   @column()
-  declare fullName: string | null
+  declare firstName: string | null
 
   @column()
-  declare role: UserRole
+  declare lastName: string | null
 
   @column()
-  declare provider: AuthProvider
+  declare globalRoleId: number
 
   @column()
-  declare providerId: string | null
+  declare timeZoneId: number | null
 
-  // VT specific — stores the user's PID (e.g. thomask88)
   @column()
-  declare casPid: string | null
+  declare currentWorkoutScoreId: number | null
+
+  @column()
+  declare slug: string
+
+  @column()
+  declare avatar: string | null
+
+  @column()
+  declare signInCount: number
+
+  @column()
+  declare resetPasswordToken: string | null
+
+  @column.dateTime()
+  declare resetPasswordSentAt: DateTime | null
+
+  @column.dateTime()
+  declare rememberCreatedAt: DateTime | null
+
+  @column.dateTime()
+  declare currentSignInAt: DateTime | null
+
+  @column.dateTime()
+  declare lastSignInAt: DateTime | null
+
+  @column()
+  declare currentSignInIp: string | null
+
+  @column()
+  declare lastSignInIp: string | null
+
+  @column()
+  declare confirmationToken: string | null
+
+  @column.dateTime()
+  declare confirmedAt: DateTime | null
+
+  @column.dateTime()
+  declare confirmationSentAt: DateTime | null
 
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
@@ -47,17 +88,20 @@ export default class User extends compose(BaseModel, AuthFinder) {
   @column.dateTime({ autoCreate: true, autoUpdate: true })
   declare updatedAt: DateTime
 
-  // ── Auth ─────────────────────────────────────────────────────────
-
   static accessTokens = DbAccessTokensProvider.forModel(User)
 
-  // ── Helpers ──────────────────────────────────────────────────────
+  @belongsTo(() => GlobalRole)
+  declare globalRole: BelongsTo<typeof GlobalRole>
 
-  get isAdmin(): boolean {
-    return this.role === 'admin'
-  }
+  @belongsTo(() => TimeZone)
+  declare timeZone: BelongsTo<typeof TimeZone>
 
-  get isOAuthUser(): boolean {
-    return this.provider !== 'local'
-  }
+  @hasMany(() => Submission)
+  declare submissions: HasMany<typeof Submission>
+
+  @hasMany(() => Identity)
+  declare identities: HasMany<typeof Identity>
+
+  @hasMany(() => LtiIdentity)
+  declare ltiIdentities: HasMany<typeof LtiIdentity>
 }
