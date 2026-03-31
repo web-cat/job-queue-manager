@@ -172,3 +172,6 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
+
+#Frontend Cache
+frontend/node-compile-cache/
