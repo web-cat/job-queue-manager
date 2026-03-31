@@ -25,6 +25,9 @@ export default class Submission extends BaseModel {
   declare score: number | null
 
   @column()
+  declare filePath: string | null
+
+  @column()
   declare feedbackReady: boolean
 
   @column()

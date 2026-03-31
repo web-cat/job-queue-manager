@@ -13,19 +13,34 @@ export default class EnqueuedJob extends BaseModel {
   declare submissionId: number
 
   @column()
-  declare workerId: number | null
+  declare podName: string | null
 
   @column()
   declare priority: number | null
 
   @column()
-  declare discarded: boolean
+  declare containerImage: string | null
 
   @column()
-  declare suspended: boolean
+  declare envVars: Record<string, unknown> | null
+
+  @column()
+  declare status: string
+
+  @column()
+  declare retryCount: number
+
+  @column()
+  declare result: Record<string, unknown> | null
+
+  @column.dateTime()
+  declare startedAt: DateTime | null
 
   @column.dateTime()
   declare queueTime: DateTime | null
+
+  @column.dateTime()
+  declare completedAt: DateTime | null
 
   @belongsTo(() => Submission)
   declare submission: BelongsTo<typeof Submission>

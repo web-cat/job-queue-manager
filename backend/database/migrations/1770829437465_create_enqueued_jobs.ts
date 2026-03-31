@@ -9,13 +9,13 @@ export default class extends BaseSchema {
       table.increments('id')
       table.integer('submission_id').notNullable().references('id').inTable('submission')
       table.string('pod_name', 255).nullable()
-      table.smallint('priority').nullable()
+      table.smallint('priority').nullable() // 1 for testing new assignment, 2 for normal submission, 3 for regrade submissions
       table.timestamp('started_at').nullable()
       table.timestamp('queue_time').nullable()
       table.timestamp('completed_at').nullable()
-      table.string('container_image', 255).nullable()
-      table.jsonb('env_vars').nullable()
-      table.string('status', 50).notNullable().defaultTo('pending')
+      table.string('container_image', 255).nullable() // base image for pod
+      table.jsonb('env_vars').nullable() // environment variables containing testing specs (max memory, timeout limit, student zip, testing zip, etc.)
+      table.string('status', 50).notNullable().defaultTo('pending') // pending, completed, running, failed
       table.integer('retry_count').defaultTo(0)
       table.jsonb('result').nullable()
     })
