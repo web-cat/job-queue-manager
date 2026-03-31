@@ -4,7 +4,7 @@ export default class extends BaseSchema {
   async up() {
     // ── Submission Policies ───────────────────────────────────────
     this.schema.createTable('submission_policy', (table) => {
-      table.integer('id').primary()
+      table.increments('id')
       table.double('available_points').nullable()
       table.bigint('available_time_delta').nullable()
       table.boolean('award_early_bonus').notNullable()
@@ -149,7 +149,7 @@ export default class extends BaseSchema {
 
     // ── Grading Plugins ───────────────────────────────────────────
     this.schema.createTable('grading_plugin', (table) => {
-      table.integer('id').primary()
+      table.increments('id')
       table.integer('user_id').nullable().references('id').inTable('user')
       table.binary('config_description').nullable()
       table.binary('default_config_settings').nullable()
@@ -169,7 +169,7 @@ export default class extends BaseSchema {
 
     // ── Step Configs ──────────────────────────────────────────────
     this.schema.createTable('step_config', (table) => {
-      table.integer('id').primary()
+      table.increments('id')
       table.binary('config_settings').nullable()
       table.integer('user_id').nullable().references('id').inTable('user')
       table.text('name').nullable()
@@ -180,7 +180,7 @@ export default class extends BaseSchema {
 
     // ── Steps ─────────────────────────────────────────────────────
     this.schema.createTable('step', (table) => {
-      table.integer('id').primary()
+      table.increments('id')
       table.integer('assignment_id').nullable().references('id').inTable('assignment')
       table.binary('config_settings').nullable()
       table.integer('order').nullable()
@@ -215,7 +215,7 @@ export default class extends BaseSchema {
 
     // ── LIS Result IDs ────────────────────────────────────────────
     this.schema.createTable('lis_result_id', (table) => {
-      table.integer('id').primary()
+      table.increments('id')
       table.string('lis_result_sourcedid', 255).notNullable()
       table.string('lis_result_source_did', 255).notNullable()
       table.integer('lms_instance_id').notNullable().references('id').inTable('lms_instance')
@@ -229,7 +229,8 @@ export default class extends BaseSchema {
 
     // ── Submission Result ─────────────────────────────────────────
     this.schema.createTable('submission_result', (table) => {
-      table.double('correctness_score').primary()
+      table.increments('id')
+      table.double('correctness_score').nullable()
       table.double('tool_score').nullable()
       table.double('ta_score').nullable()
       table.text('comments').nullable()
@@ -261,9 +262,9 @@ export default class extends BaseSchema {
       table.integer('submit_number').nullable()
       table.string('lis_result_sourcedid', 255).nullable()
       table
-        .double('submission_result_id')
+        .integer('submission_result_id')
         .notNullable()
-        .references('correctness_score')
+        .references('id')
         .inTable('submission_result')
       table.boolean('is_submission_for_grading').notNullable().defaultTo(false)
       table.boolean('partner_link').notNullable().defaultTo(false)

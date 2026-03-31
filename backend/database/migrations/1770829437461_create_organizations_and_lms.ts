@@ -9,6 +9,7 @@ export default class extends BaseSchema {
       table.string('abbreviation', 255).nullable()
       table.string('slug', 255).notNullable()
       table.boolean('is_hidden').defaultTo(false)
+      table.integer('lms_instance_id').nullable()
       table.timestamps(true, true)
     })
 
@@ -64,7 +65,7 @@ export default class extends BaseSchema {
     this.schema.raw(`
       ALTER TABLE organization
         ADD CONSTRAINT fk_organization_lms_instance
-        FOREIGN KEY (id) REFERENCES lms_instance (id)
+        FOREIGN KEY (lms_instance_id) REFERENCES lms_instance (id)
     `)
   }
 

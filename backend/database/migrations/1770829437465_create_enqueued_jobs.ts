@@ -6,7 +6,7 @@ export default class extends BaseSchema {
     // This is the shared table between your team and the K8s team.
     // Fields marked TODO need confirmation from the other team before finalizing.
     this.schema.createTable('enqueued_job', (table) => {
-      table.integer('id').primary()
+      table.increments('id')
       table.integer('submission_id').notNullable().references('id').inTable('submission')
       table.string('pod_name', 255).nullable()
       table.smallint('priority').nullable()
