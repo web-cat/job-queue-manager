@@ -1,3 +1,6 @@
+// PURPOSE: Files attached to exercise versions (images, datasets, starter files).
+// Token provides a public URL-safe identifier for file access.
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'

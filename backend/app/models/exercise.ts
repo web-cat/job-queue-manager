@@ -1,3 +1,22 @@
+// PURPOSE: The base unit of academic content. An exercise is a single question or
+// coding problem that can appear in multiple assignments.
+
+// DESIGN: question_type is an integer enum defining the exercise type (coding,
+// multiple choice, etc.). current_version_id points to the active version —
+// exercises are versioned so historical submissions reference the version that
+// was active when submitted. exercise_collection_id groups exercises into
+// shareable collections.
+
+// DEPENDENCIES: irt_data, exercise_family, exercise_collection
+
+// CONSUMERS: exercise_version, exercise_workouts, course_exercises
+
+// NEXT TEAM NOTES: Always work with exercise_versions, not exercises directly,
+// when associating with submissions. The exercise is the parent; the version
+// is what students actually see and submit against.
+
+// STATUS: complete
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, belongsTo, hasMany } from '@adonisjs/lucid/orm'
 import type { BelongsTo, HasMany } from '@adonisjs/lucid/types/relations'

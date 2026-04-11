@@ -1,3 +1,24 @@
+// PURPOSE: Represents a student's submission of code for an assignment. The central
+// entity in the grading workflow — everything flows through submission.
+
+// DESIGN: Links a user to an assignment_offering (the specific instance of an
+// assignment in a course section). The workoutId column is a legacy name for
+// what is effectively assignmentId. feedbackReady is flipped to true by the
+// other team's system when grading is complete. The hasOne relationship to
+// enqueuedJob allows tracking job status from the submission.
+
+// DEPENDENCIES: user, assignment (via workoutId FK), assignment_offering,
+// submission_result, lti_workouts
+
+// CONSUMERS: enqueued_job.ts, submissions_controller.ts, job_queue_service.ts
+
+// NEXT TEAM NOTES: The workoutId column references assignment.id despite its
+// confusing name — this is a legacy naming issue. When the other team completes
+// grading, they update submission_result and set feedbackReady=true on this
+// record. Poll feedbackReady to know when results are available.
+
+// STATUS: complete [NEEDS INLINE DOCS — workoutId naming explanation]
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, belongsTo, hasOne } from '@adonisjs/lucid/orm'
 import type { BelongsTo, HasOne } from '@adonisjs/lucid/types/relations'

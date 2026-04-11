@@ -1,3 +1,13 @@
+// PURPOSE: Base prompt record using polymorphic actable pattern. The actable_type
+// and actable_id point to the specific prompt type (coding_prompt,
+// multiple_choice_prompt, etc.).
+
+// NEXT TEAM NOTES: [NEEDS INLINE DOCS] — The actable pattern requires checking
+// actable_type before loading the related prompt data. This is the most complex
+// relationship in the schema.
+
+// STATUS: complete [NEEDS INLINE DOCS]
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, belongsTo, hasMany } from '@adonisjs/lucid/orm'
 import type { BelongsTo, HasMany } from '@adonisjs/lucid/types/relations'

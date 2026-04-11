@@ -1,3 +1,6 @@
+// PURPOSE: University or department that owns courses and LMS instances.
+// STATUS: complete
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, hasMany } from '@adonisjs/lucid/orm'
 import type { HasMany } from '@adonisjs/lucid/types/relations'

@@ -1,3 +1,22 @@
+/*
+PURPOSE: Defines the VS Code dev container for the project. Ensures every team
+member works in an identical Linux environment regardless of their host OS.
+Eliminates "works on my machine" issues across the team.
+DESIGN: Uses Microsoft's official typescript-node:22 base image rather than a
+custom Dockerfile for lower maintenance overhead. kubectl is installed as a
+devcontainer feature so team members can interact with the VT Discovery
+Kubernetes cluster from within the container. KUBECONFIG is automatically
+pointed at discovery.yaml in the project root. pnpm is enforced as the
+package manager to maintain monorepo workspace consistency.
+DEPENDENCIES: Docker Desktop (must be running on host), discovery.yaml in
+project root (gitignored — each team member downloads their own from Rancher)
+CONSUMERS: VS Code Dev Containers extension, all team members
+NEXT TEAM NOTES: If you need to add new tools or extensions, add them here
+rather than installing manually so all team members benefit. The remoteUser
+is set to root to avoid permission issues with the Kubernetes config files.
+STATUS: complete
+*/
+
 {
   "name": "job-queue-manager",
   "image": "mcr.microsoft.com/devcontainers/typescript-node:22",

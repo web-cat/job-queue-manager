@@ -1,3 +1,6 @@
+// PURPOSE: A single test case for a coding exercise — input, expected output,
+// weight, and visibility flags (hidden, screening, example).
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'

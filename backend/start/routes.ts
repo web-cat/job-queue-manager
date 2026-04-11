@@ -1,3 +1,26 @@
+// PURPOSE: Defines all HTTP routes for the backend API. The single source of
+// truth for what endpoints exist, their HTTP methods, and which middleware
+// protects them.
+
+// DESIGN: Routes are organized into two groups: public (no auth required) and
+// protected (API token required via middleware.auth). All routes are prefixed
+// with /api for clarity. The webhook route is intentionally public because it
+// receives callbacks from the other team's system — consider adding IP
+// restriction middleware in production. Resource routes (router.resource())
+// generate standard CRUD endpoints automatically.
+
+// DEPENDENCIES: All controllers, middleware (auth, admin), kernel.ts
+
+// CONSUMERS: AdonisJS HTTP server
+
+// NEXT TEAM NOTES: When adding new features, add routes here first then create
+// the corresponding controller methods. Keep the public/protected grouping
+// clear. CAS auth routes will need to be added as public routes (the redirect
+// and callback cannot require an existing token). LTI launch endpoints are
+// also public.
+
+// STATUS: complete [NEEDS INLINE DOCS — webhook IP restriction note]
+
 /*
 |--------------------------------------------------------------------------
 | Routes file

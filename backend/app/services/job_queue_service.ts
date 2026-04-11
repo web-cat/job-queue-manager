@@ -1,3 +1,30 @@
+// PURPOSE: The integration boundary between this system and the other team's
+// Kubernetes job execution backend. All communication with their REST API
+// goes through this service — no other file should make direct HTTP calls
+// to their system.
+
+// DESIGN: Deliberately isolated as a service (not a controller) so it can be
+// called from submissions_controller without coupling the HTTP layer to the
+// integration layer. All methods that require the other team's API are stubbed
+// with detailed TODO comments explaining exactly what needs to be implemented.
+// createLocalRecord() is the only fully implemented method — it creates the
+// enqueued_job record on your side regardless of the other team's API status.
+
+// DEPENDENCIES: enqueued_job.ts, submission.ts
+
+// CONSUMERS: submissions_controller.ts
+
+// NEXT TEAM NOTES: THIS IS THE PRIMARY FILE TO WORK ON ONCE THE OTHER TEAM
+// CONFIRMS THEIR API CONTRACT. The four questions to answer:
+
+// 1. Their API base URL → JOB_QUEUE_API_URL env var
+// 2. Their API auth mechanism → JOB_QUEUE_API_KEY env var
+// 3. Their job payload format → enqueue() method body
+// 4. How results come back → handleWebhook() or checkStatus() depending
+//    Once answered, fill in the TODO stubs. The interface is designed so that
+//    no other files need to change when this is implemented.
+//    STATUS: stub [CRITICAL — must be implemented before production deployment]
+
 import EnqueuedJob from '#models/enqueued_job'
 import Submission from '#models/submission'
 import { DateTime } from 'luxon'

@@ -1,3 +1,6 @@
+// PURPOSE: A curated collection of exercises that can be shared across courses
+// and organizations.
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'

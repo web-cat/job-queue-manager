@@ -1,3 +1,5 @@
+// PURPOSE: Links users to user_groups. Junction table.
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'

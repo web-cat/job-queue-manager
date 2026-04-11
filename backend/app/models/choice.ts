@@ -1,3 +1,6 @@
+// PURPOSE: A single answer choice for a multiple_choice_prompt with position,
+// feedback, and point value.
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'

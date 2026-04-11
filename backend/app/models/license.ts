@@ -1,3 +1,5 @@
+// PURPOSE: A specific license (CC-BY, MIT, etc.) applied to exercise collections.
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'

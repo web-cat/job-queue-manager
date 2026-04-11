@@ -1,3 +1,22 @@
+// PURPOSE: Creates the user identity and authentication foundation. This migration
+// must run first as almost every other table references the user table.
+
+// DESIGN: The user table follows the legacy schema exactly, including the
+// encrypted_password column name (not password) which is a Rails Devise
+// convention. auth_access_tokens is an AdonisJS-specific table required by
+// DbAccessTokensProvider for API token authentication. The identity table
+// supports OAuth provider linking (Google, GitHub, CAS).
+
+// DEPENDENCIES: None (first migration)
+
+// CONSUMERS: All subsequent migrations reference user table
+
+// NEXT TEAM NOTES: If adding new auth providers, add them to the identity table's
+// provider column. Do not modify the user table structure without coordinating
+// with the other team — they may reference user IDs.
+
+// STATUS: complete
+
 import { BaseSchema } from '@adonisjs/lucid/schema'
 
 export default class extends BaseSchema {

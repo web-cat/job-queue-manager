@@ -1,3 +1,5 @@
+// PURPOSE: User-selectable time zones with display names for the UI.
+
 import { DateTime } from 'luxon'
 import { BaseModel, column } from '@adonisjs/lucid/orm'
 

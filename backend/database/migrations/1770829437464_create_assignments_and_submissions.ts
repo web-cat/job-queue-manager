@@ -1,3 +1,28 @@
+// PURPOSE: Creates the assignment, submission, and grading infrastructure. This is
+// the core of the grading workflow — assignments are collections of exercises
+// offered to students, submissions are student attempts, grading_plugins define
+// how code gets executed.
+
+// DESIGN: submission_policy controls late penalties, attempt limits, partner
+
+// submissions, and time banks. workout_policies control UI behavior (hide
+// feedback, hide thumbnails). The submission table has a self-referential FK
+// (primary_submission_id) to support partner submissions where one submission
+// is the primary. submission_result uses correctness_score as its primary key
+// (unusual) — this is preserved from the legacy schema.
+
+// DEPENDENCIES: 1770829437463 (exercises), 1770829437461 (lti_workouts)
+
+// CONSUMERS: 1770829437465 (enqueued_job references submission)
+
+// NEXT TEAM NOTES: The grading_plugin and step tables are likely managed primarily
+// by the other team's Kubernetes backend. Your team creates the records but the
+// other team executes them. Coordinate schema changes to these tables carefully.
+// The submission_result primary key on correctness_score is a legacy quirk —
+// do not change it as it would break the submission FK.
+
+// STATUS: complete [NEEDS INLINE DOCS — submission_result PK explanation]
+
 import { BaseSchema } from '@adonisjs/lucid/schema'
 
 export default class extends BaseSchema {

@@ -1,3 +1,23 @@
+// PURPOSE: Handles student code submission intake. Creates submission records,
+// triggers job queue integration, and returns grading results.
+
+// DESIGN: The store() method is the critical path — it creates a submission_result
+// stub (required by FK), creates the submission record, creates a local
+// enqueued_job record, and then calls job_queue_service to POST the job to the
+// other team's API (currently stubbed). The webhook() method receives result
+// callbacks from the other team when grading completes.
+
+// DEPENDENCIES: submission.ts, submission_result.ts, job_queue_service.ts
+
+// CONSUMERS: routes.ts, frontend submission form
+
+// NEXT TEAM NOTES: [NEEDS INLINE DOCS] — Three critical TODOs in this file:
+
+// 1. File upload handling (zip submission storage)
+// 2. Uncomment job_queue_service.enqueue() call once other team confirms endpoint
+// 3. Implement webhook() to process result callbacks and update submission_result
+//    STATUS: stub [NEEDS INLINE DOCS — all three TODOs are blocking for production]
+
 import { DateTime } from 'luxon'
 import type { HttpContext } from '@adonisjs/core/http'
 import vine from '@vinejs/vine'

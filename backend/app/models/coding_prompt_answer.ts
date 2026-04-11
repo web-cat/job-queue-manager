@@ -1,3 +1,6 @@
+// PURPOSE: A student's answer to a coding prompt — their submitted code and
+// any compilation errors.
+
 import { BaseModel, column } from '@adonisjs/lucid/orm'
 
 export default class CodingPromptAnswer extends BaseModel {

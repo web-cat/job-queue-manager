@@ -1,3 +1,20 @@
+// PURPOSE: Stores system errors for debugging and auditing. Records exception
+// details including stack trace, request parameters, and user agent.
+
+// DESIGN: Named AppError (not Error) to avoid conflict with JavaScript's built-in
+// Error class. The usable_type/usable_id pattern is a Rails polymorphic
+// association linking errors to the object that caused them.
+
+// DEPENDENCIES: None
+
+// CONSUMERS: Exception handler, debugging tools
+
+// NEXT TEAM NOTES: The usable_type/usable_id columns follow Rails STI naming.
+// When logging errors from TypeScript, set usable_type to the model class name
+// and usable_id to the relevant record ID.
+
+// STATUS: complete
+
 import { DateTime } from 'luxon'
 import { BaseModel, column } from '@adonisjs/lucid/orm'
 

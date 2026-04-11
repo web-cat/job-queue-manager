@@ -1,3 +1,18 @@
+# PURPOSE: One-time setup script that runs after the dev container is first opened.
+# Verifies cluster connectivity, installs workspace dependencies, and copies
+# .env.example to .env if not already present.
+
+# DESIGN: Intentionally simple bash script rather than a complex tool. Designed
+# to be idempotent — safe to run multiple times without side effects.
+# DEPENDENCIES: kubectl (installed in container), pnpm (installed in postCreateCommand),
+# discovery.yaml in project root
+
+# CONSUMERS: Team members on first container setup
+
+# NEXT TEAM NOTES: If onboarding steps change (new env vars, new services, etc.)
+# update this script so new team members get correct setup automatically.
+# STATUS: complete
+
 #!/bin/bash
 # .devcontainer/setup.sh
 # Run this once after opening the dev container for the first time.
@@ -57,4 +72,7 @@ echo "    cd backend && node ace serve --watch"
 echo ""
 echo "  Terminal 4 — start frontend:"
 echo "    cd frontend && pnpm dev"
+echo ""
+echo "  See /docs/documentation.md for understanding"
+echo ""
 echo "================================================="

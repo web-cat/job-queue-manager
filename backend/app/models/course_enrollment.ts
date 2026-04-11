@@ -1,3 +1,6 @@
+// PURPOSE: Links a user to a section with a specific role. The junction table
+// for the student/instructor/TA relationship to a course section.
+
 import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'
 import User from './user.js'

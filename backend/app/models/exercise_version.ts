@@ -1,3 +1,21 @@
+// PURPOSE: A specific version of an exercise. Allows exercise content to be
+// updated without invalidating historical submissions that reference the
+// previous version.
+
+// DESIGN: Each version has its own stem (question preamble) and set of prompts.
+// text_representation stores a serialized version for search/display purposes.
+// irt_data tracks psychometric properties per version.
+
+// DEPENDENCIES: exercise, stem, irt_data, user (creator)
+
+// CONSUMERS: attempt, prompt, resource_files (via exercise_versions_resource_files)
+
+// NEXT TEAM NOTES: When the other team executes grading, they reference
+// exercise_version_id on the attempt record. The grading_plugin associated
+// with the assignment step defines how that version's code gets executed.
+
+// STATUS: complete
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, belongsTo, hasMany } from '@adonisjs/lucid/orm'
 import type { BelongsTo, HasMany } from '@adonisjs/lucid/types/relations'
