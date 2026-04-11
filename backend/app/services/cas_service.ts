@@ -1,3 +1,23 @@
+// PURPOSE: Handles all direct communication with the VT CS CAS server.
+// Encapsulates the CAS protocol so the controller stays clean.
+// Builds redirect URLs, validates tickets, and parses XML responses.
+// DESIGN: Written as a pure service with no AdonisJS-specific dependencies
+// so it can be tested independently. Uses axios for HTTP and fast-xml-parser
+// for XML parsing — no passport or external CAS library needed. The XML
+// parsing handles the CAS 2.0 protocol response format directly.
+// CAS_SERVICE_URL defaults to empty string if not set — the app will still
+// start but CAS login will not work until the env var is configured.
+// DEPENDENCIES: axios, fast-xml-parser, start/env.ts
+// CONSUMERS: cas_controller.ts
+// NEXT TEAM NOTES: If VT changes their CAS server or attributes, this is the
+// only file that needs updating. The parseValidationResponse() method handles
+// the XML structure — if attribute names change, update the keys there.
+// To switch from VT CS CAS to university-wide CAS, change CAS_BASE_URL in
+// .env to https://login.vt.edu/profile/cas — no code changes needed.
+// ENV VARS REQUIRED:
+// CAS_BASE_URL=https://login.cs.vt.edu/cas
+// CAS_SERVICE_URL=https://webcatmaxxers.discovery.cs.vt.edu/api/auth/cas/callback
+
 import axios from 'axios'
 import { XMLParser } from 'fast-xml-parser'
 import env from '#start/env'

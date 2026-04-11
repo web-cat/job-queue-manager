@@ -1,3 +1,30 @@
+// PURPOSE: Handles the three CAS SSO HTTP routes — redirect, callback, logout.
+// Orchestrates the full CAS flow by calling CasService and managing the
+// user creation/lookup in the identity table.
+// DESIGN: On callback, the controller first checks for an existing identity
+// record (provider='cas', uid=<PID>). If found, it loads the linked user.
+// If not, it uses User.firstOrCreate to find by email or create a new account.
+// A new identity record is always created when a new CAS user logs in for the
+// first time. The token is passed to the frontend via redirect query string
+// rather than a JSON response because the CAS callback is a browser redirect,
+// not an AJAX request.
+// globalRoleId is hardcoded to 2 (Student) for new CAS users — assumes the
+// global_role table has been seeded with Admin (id=1) and Student (id=2).
+// DEPENDENCIES: cas_service.ts, user.ts, identity.ts
+// CONSUMERS: routes.ts
+// NEXT TEAM NOTES: The frontend must handle the /auth/callback?token=xxx&pid=yyy
+// redirect by extracting the token from the query string and storing it
+// (localStorage or cookie) for use in subsequent API requests.
+// If firstName/lastName are null after CAS login (VT CS CAS doesn't always
+// return these), you can optionally query VT's LDAP directory for the user's
+// full name using their PID.
+// The TODO in this file: seed global_role before CAS users can log in.
+// Run in Adminer:
+// INSERT INTO global_role (name, can_manage_all_courses,
+// can_edit_system_configuration, builtin)
+// VALUES ('Admin', true, true, true), ('Student', false, false, true);
+// STATUS: complete [NEEDS INLINE DOCS — user creation flow]
+
 import type { HttpContext } from '@adonisjs/core/http'
 import env from '#start/env'
 import User from '#models/user'
