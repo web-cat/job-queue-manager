@@ -1,3 +1,15 @@
+# PURPOSE: Prevents sensitive and generated files from being committed to the repo.
+
+# DESIGN: Covers Node.js, pnpm, Nuxt 4, AdonisJS, and Kubernetes-specific patterns.
+# Critical entries: discovery.yaml (cluster credentials), .env (secrets).
+# .env.example is explicitly allowed so teammates know what variables are needed.
+
+# DEPENDENCIES: git
+
+# NEXT TEAM NOTES: If you add new tools that generate build artifacts or cache
+# files, add their patterns here. Never remove discovery.yaml or .env from
+# this file — committing either would expose credentials.
+
 # Logs
 logs
 *.log

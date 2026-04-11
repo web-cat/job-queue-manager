@@ -1,3 +1,25 @@
+// PURPOSE: Handles user authentication — registration, login, logout, and API
+// token management. The entry point for all auth flows including local
+// password auth, and (when implemented) CAS SSO and LTI.
+
+// DESIGN: Uses vine validators for all request inputs to ensure type safety and
+// provide clear error messages. Tokens are created via AdonisJS
+// DbAccessTokensProvider and stored in auth_access_tokens. The createToken
+// method allows admins to generate named tokens for worker pods and service
+// integrations.
+
+// DEPENDENCIES: user.ts model, vine validators
+
+// CONSUMERS: routes.ts, frontend auth pages
+
+// NEXT TEAM NOTES: CAS login will add a cas() and casCallback() method to this
+// controller. OAuth will add similar methods. The existing local auth methods
+// should not need to change when adding new providers. When CAS is implemented,
+// look up or create the user via their identity record (provider='cas',
+// uid=<PID>).
+
+// STATUS: complete [NEEDS INLINE DOCS — token creation flow]
+
 import type { HttpContext } from '@adonisjs/core/http'
 import User from '#models/user'
 import vine from '@vinejs/vine'

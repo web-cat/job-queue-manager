@@ -1,4 +1,23 @@
+# PURPOSE: Declares the pnpm monorepo workspace members. Tells pnpm that backend/,
+# frontend/, and packages/ are all part of the same workspace so they can share
+# dependencies and import from each other.
+
+# DESIGN: Monorepo structure was chosen to allow shared TypeScript types and
+# utilities between the frontend and backend without publishing packages.
+# The packages/ directory is reserved for shared code (data transfer objects,
+# shared types, utility functions) that both frontend and backend consume.
+
+# DEPENDENCIES: pnpm
+
+# CONSUMERS: pnpm install, all workspace scripts
+
+# NEXT TEAM NOTES: If you add a new workspace member (e.g. a CLI tool or shared
+# library), add it here. Keep shared TypeScript interfaces in packages/ rather
+# than duplicating them in frontend and backend.
+
+# STATUS: complete
+
 packages:
-  - 'backend'
-  - 'frontend'
-  - 'packages/*'
+  - "backend"
+  - "frontend"
+  - "packages/*"

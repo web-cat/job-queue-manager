@@ -1,3 +1,6 @@
+// PURPOSE: Links resource files to exercise versions. Junction table for the
+// many-to-many relationship.
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'

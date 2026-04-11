@@ -1,3 +1,21 @@
+// PURPOSE: CRUD operations for assignments and their section-specific offerings.
+// Used by instructors to create and manage assignments, and by students to
+// view available assignments.
+
+// DESIGN: Date fields use vine.string() with DateTime.fromISO() conversion rather
+// than vine.date() because vine.date() returns JS Date objects which are
+// incompatible with Lucid's DateTime columns. Index queries filter by
+// user ownership or public visibility.
+
+// DEPENDENCIES: assignment.ts, assignment_offering.ts
+
+// CONSUMERS: routes.ts, frontend assignment management pages
+
+// NEXT TEAM NOTES: The offerings sub-resource (/assignments/:id/offerings) handles
+// the association between an assignment and a specific course section. When
+// building the frontend assignment creation flow, always create an assignment
+// first then create offerings for each section it should appear in.
+
 import type { HttpContext } from '@adonisjs/core/http'
 import vine from '@vinejs/vine'
 import Assignment from '#models/assignment'

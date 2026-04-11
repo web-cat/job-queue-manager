@@ -1,3 +1,7 @@
+// PURPOSE: Links an LMS assignment to a system assignment for LTI integration.
+// When a student clicks an assignment link in Canvas, this record maps it to
+// the correct assignment in the system.
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'

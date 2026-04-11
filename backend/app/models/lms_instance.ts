@@ -1,3 +1,21 @@
+// PURPOSE: Represents a specific deployment of an LMS (e.g. VT's Canvas instance
+// at canvas.vt.edu). Consumer_key and consumer_secret are the LTI 1.1
+// credentials for that LMS instance.
+
+// DESIGN: consumer_secret is marked serializeAs: null to prevent credential
+// leakage in API responses. Each university or department may have their own
+// LMS instance with different credentials.
+
+// DEPENDENCIES: lms_type, organization
+
+// CONSUMERS: section, lti_identity, lis_result_id, lti_workouts
+
+// NEXT TEAM NOTES: A seed record for VT's Canvas instance will need to be created.
+// Contact VT Middleware to obtain the consumer_key and consumer_secret for
+// LTI 1.1 integration with Canvas.
+
+// STATUS: complete [NEEDS INLINE DOCS — consumer_secret serialization]
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, belongsTo, hasMany } from '@adonisjs/lucid/orm'
 import type { BelongsTo, HasMany } from '@adonisjs/lucid/types/relations'

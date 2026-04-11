@@ -1,3 +1,6 @@
+// PURPOSE: The preamble/question text that appears before the prompts in an
+// exercise version. Shared across prompt types.
+
 import { DateTime } from 'luxon'
 import { BaseModel, column } from '@adonisjs/lucid/orm'
 

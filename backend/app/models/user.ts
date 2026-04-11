@@ -1,3 +1,26 @@
+// PURPOSE: The central model for all authenticated users — students, instructors,
+// TAs, and administrators. Used by AdonisJS auth for token-based authentication.
+
+// DESIGN: Extends both BaseModel and the AuthFinder mixin which provides
+// verifyCredentials() for login. The passwordColumnName is encrypted_password
+// (not password) to match the legacy Rails Devise convention. The password
+// column is marked serializeAs: null so it never appears in API responses.
+// accessTokens uses DbAccessTokensProvider which requires the auth_access_tokens
+// table created in migration 1770829437460. Role/permission checking is done
+// via the globalRole relationship rather than a simple role string field.
+
+// DEPENDENCIES: global_role, time_zones tables, auth_access_tokens table
+
+// CONSUMERS: All controllers that use auth.getUserOrFail(), identity.ts,
+// lti_identity.ts, submission.ts, course_enrollment.ts
+
+// NEXT TEAM NOTES: When checking if a user is an admin, load the globalRole
+// relationship first: await user.load('globalRole'). CAS authentication will
+// set the cas_pid field (stored in identity table via provider='cas'). OAuth
+// logins create identity records linked to this user.
+
+// STATUS: complete [NEEDS INLINE DOCS — auth mixin and accessTokens explanation]
+
 import { DateTime } from 'luxon'
 import hash from '@adonisjs/core/services/hash'
 import { compose } from '@adonisjs/core/helpers'

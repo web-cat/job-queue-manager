@@ -1,3 +1,5 @@
+// PURPOSE: Groups related exercises together (e.g. all versions of a problem set).
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, hasMany } from '@adonisjs/lucid/orm'
 import type { HasMany } from '@adonisjs/lucid/types/relations'

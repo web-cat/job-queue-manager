@@ -1,3 +1,21 @@
+// PURPOSE: CRUD operations for courses, sections, and enrollments. Used by
+// administrators and instructors to set up the course structure that students
+// will enroll in.
+
+// DESIGN: Follows the same vine validator pattern as assignments_controller.
+// Enrollment validation prevents duplicate enrollments with a conflict response.
+// The unenroll endpoint takes userId as a URL parameter to allow admins to
+// remove specific users.
+
+// DEPENDENCIES: course.ts, section.ts, course_enrollment.ts
+
+// CONSUMERS: routes.ts, frontend course management pages
+
+// NEXT TEAM NOTES: LTI course creation (when a student launches from Canvas for
+// the first time) should auto-create section and course_enrollment records.
+// This will require a dedicated LTI launch handler that calls course/section
+// creation logic.
+
 import type { HttpContext } from '@adonisjs/core/http'
 import vine from '@vinejs/vine'
 import Course from '#models/course'

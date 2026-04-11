@@ -1,3 +1,7 @@
+// PURPOSE: Legacy Rails ActiveAdmin comment system. Stores admin notes attached
+// to any resource. Likely not actively used in this implementation but
+// preserved for schema compatibility.
+
 import { DateTime } from 'luxon'
 import { BaseModel, column } from '@adonisjs/lucid/orm'
 

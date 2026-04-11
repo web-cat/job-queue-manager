@@ -1,3 +1,7 @@
+// PURPOSE: Controls UI/UX behavior for assignment attempts — hiding feedback,
+// thumbnails, scores during review periods.
+// STATUS: complete
+
 import { DateTime } from 'luxon'
 import { BaseModel, column } from '@adonisjs/lucid/orm'
 

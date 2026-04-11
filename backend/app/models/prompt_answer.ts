@@ -1,3 +1,7 @@
+// PURPOSE: Links an attempt to a prompt answer using the same actable pattern
+// as prompt.ts.
+// STATUS: complete [NEEDS INLINE DOCS — actable pattern]
+
 import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'
 import Prompt from './prompt.js'

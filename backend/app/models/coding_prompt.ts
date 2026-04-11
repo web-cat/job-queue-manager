@@ -1,3 +1,6 @@
+// PURPOSE: A coding exercise prompt — contains the wrapper code, test script,
+// and starter code shown to students.
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, hasMany } from '@adonisjs/lucid/orm'
 import type { HasMany } from '@adonisjs/lucid/types/relations'

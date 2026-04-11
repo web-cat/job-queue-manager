@@ -1,3 +1,5 @@
+// PURPOSE: A multiple choice question prompt with scrambling support.
+
 import { BaseModel, column, hasMany } from '@adonisjs/lucid/orm'
 import type { HasMany } from '@adonisjs/lucid/types/relations'
 import Choice from './choice.js'

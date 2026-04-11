@@ -1,3 +1,33 @@
+// PURPOSE: A specific offering of a course in a given term. This is what students
+// enroll in and what assignments are attached to.
+
+// DESIGN: Named section but represents course_offering in the domain model.
+// The lms_instance_id supports LTI integration — when students access via
+// Canvas, the section is associated with a Canvas course instance.
+
+// DEPENDENCIES: course, term, lms_instance
+
+// CONSUMERS: course_enrollment, assignment_offering, courses_controller.ts
+
+// NEXT TEAM NOTES: In many places course_offering_id actually means section.id.
+// This naming inconsistency exists throughout the codebase as a legacy artifact.
+
+// STATUS: completePURPOSE: A specific offering of a course in a given term. This is what students
+// enroll in and what assignments are attached to.
+
+// DESIGN: Named section but represents course_offering in the domain model.
+// The lms_instance_id supports LTI integration — when students access via
+// Canvas, the section is associated with a Canvas course instance.
+
+// DEPENDENCIES: course, term, lms_instance
+
+// CONSUMERS: course_enrollment, assignment_offering, courses_controller.ts
+
+// NEXT TEAM NOTES: In many places course_offering_id actually means section.id.
+// This naming inconsistency exists throughout the codebase as a legacy artifact.
+
+// STATUS: complete
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, belongsTo, hasMany } from '@adonisjs/lucid/orm'
 import type { BelongsTo, HasMany } from '@adonisjs/lucid/types/relations'

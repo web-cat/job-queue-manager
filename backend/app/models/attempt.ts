@@ -1,3 +1,8 @@
+// PURPOSE: A single attempt by a student on a specific exercise version within
+// a submission. One submission can have many attempts across its exercises.
+// NEXT TEAM NOTES: worker_time records how long the grading worker spent
+// executing this attempt. time_taken is how long the student spent.
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'

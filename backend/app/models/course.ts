@@ -1,3 +1,16 @@
+// PURPOSE: Represents an academic course (e.g. CS 3214 — Systems Software).
+// Courses are abstract definitions that get offered as sections each term.
+
+// DESIGN: organization_id links to the university/department offering the course.
+// Courses can be hidden (is_hidden) to prevent student self-enrollment while
+// still being accessible to instructors.
+
+// DEPENDENCIES: organization, user (creator)
+
+// CONSUMERS: section.ts, course_exercises.ts, courses_controller.ts
+
+// STATUS: complete
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, belongsTo, hasMany } from '@adonisjs/lucid/orm'
 import type { BelongsTo, HasMany } from '@adonisjs/lucid/types/relations'

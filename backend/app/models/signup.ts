@@ -1,3 +1,6 @@
+// PURPOSE: Stores interest signups from users who want to be notified when
+// the system opens for registration. Legacy table.
+
 import { DateTime } from 'luxon'
 import { BaseModel, column } from '@adonisjs/lucid/orm'
 
