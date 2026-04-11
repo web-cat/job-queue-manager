@@ -31,7 +31,7 @@ export default class CasService {
 
   constructor() {
     this.casBaseUrl = env.get('CAS_BASE_URL', 'https://login.cs.vt.edu/cas')
-    this.serviceUrl = env.get('CAS_SERVICE_URL')
+    this.serviceUrl = env.get('CAS_SERVICE_URL', '')
     this.parser = new XMLParser({ ignoreAttributes: false })
   }
 
