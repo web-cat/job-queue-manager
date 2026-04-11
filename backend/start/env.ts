@@ -16,7 +16,7 @@ export default await Env.create(new URL('../', import.meta.url), {
   PORT: Env.schema.number(),
   APP_KEY: Env.schema.string(),
   HOST: Env.schema.string({ format: 'host' }),
-  LOG_LEVEL: Env.schema.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']),
+  LOG_LEVEL: Env.schema.string(),
 
   /*
   |----------------------------------------------------------
@@ -27,5 +27,15 @@ export default await Env.create(new URL('../', import.meta.url), {
   DB_PORT: Env.schema.number(),
   DB_USER: Env.schema.string(),
   DB_PASSWORD: Env.schema.string.optional(),
-  DB_DATABASE: Env.schema.string()
+  DB_DATABASE: Env.schema.string(),
+
+  /*
+  |----------------------------------------------------------
+  | Variables for VT CAS authentication
+  | CAS only works on the Discovery cluster — not localhost.
+  |----------------------------------------------------------
+  */
+  CAS_BASE_URL: Env.schema.string.optional(),
+  CAS_SERVICE_URL: Env.schema.string.optional(),
+  FRONTEND_URL: Env.schema.string.optional(),
 })

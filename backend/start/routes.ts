@@ -33,6 +33,7 @@ import router from '@adonisjs/core/services/router'
 import { middleware } from '#start/kernel'
 
 const AuthController = () => import('#controllers/auth_controller')
+const CasController = () => import('#controllers/cas_controller')
 const SubmissionsController = () => import('#controllers/submissions_controller')
 const AssignmentsController = () => import('#controllers/assignments_controller')
 const CoursesController = () => import('#controllers/courses_controller')
@@ -42,34 +43,40 @@ router.get('/', async () => {
   return { hello: 'world' }
 })
 
-// ── Public routes (no auth required) ─────────────────────────────────
+// ── Public auth routes (no token required) ───────────────────────────
 router.post('/api/auth/register', [AuthController, 'register'])
 router.post('/api/auth/login', [AuthController, 'login'])
 
-// Webhook from other team — public but should be IP restricted in production
-// TODO: Add IP restriction middleware once other team confirms their server IPs
+// ── CAS SSO routes (public — CAS handles its own auth) ───────────────
+// NOTE: Only works on Discovery cluster, not localhost
+router.get('/api/auth/cas', [CasController, 'redirect'])
+router.get('/api/auth/cas/callback', [CasController, 'callback'])
+router.get('/api/auth/cas/logout', [CasController, 'logout'])
+
+// ── Webhook from other team — public but should be IP restricted ─────
+// TODO: Add IP restriction middleware once other team confirms their IPs
 router.post('/api/submissions/webhook', [SubmissionsController, 'webhook'])
 
 // ── Protected routes (API token required) ────────────────────────────
 router
   .group(() => {
-    // ── Auth ───────────────────────────────────────────────────────
+    // Auth
     router.delete('/auth/logout', [AuthController, 'logout'])
     router.get('/auth/me', [AuthController, 'me'])
     router.post('/auth/tokens', [AuthController, 'createToken'])
     router.get('/auth/tokens', [AuthController, 'listTokens'])
     router.delete('/auth/tokens/:id', [AuthController, 'revokeToken'])
 
-    // ── Submissions ────────────────────────────────────────────────
+    // Submissions
     router.get('/submissions/:id/result', [SubmissionsController, 'result'])
     router.resource('submissions', SubmissionsController).apiOnly()
 
-    // ── Assignments ────────────────────────────────────────────────
+    // Assignments
     router.get('/assignments/:id/offerings', [AssignmentsController, 'offerings'])
     router.post('/assignments/:id/offerings', [AssignmentsController, 'createOffering'])
     router.resource('assignments', AssignmentsController).apiOnly()
 
-    // ── Courses ────────────────────────────────────────────────────
+    // Courses
     router.get('/courses/:id/sections', [CoursesController, 'sections'])
     router.post('/courses/:id/sections', [CoursesController, 'createSection'])
     router.get('/courses/:id/sections/:sectionId/enrollments', [CoursesController, 'enrollments'])
