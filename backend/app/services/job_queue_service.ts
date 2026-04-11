@@ -52,7 +52,7 @@ export default class JobQueueService {
    */
   async enqueue(
     submission: Submission,
-    priority: number = 0
+    _priority: number = 0
   ): Promise<{ externalJobId: string | null; success: boolean }> {
     // TODO: Replace this stub with actual API call once other team confirms endpoint
     //
@@ -117,8 +117,8 @@ export default class JobQueueService {
     return EnqueuedJob.create({
       submissionId: submission.id,
       priority,
-      discarded: false,
-      suspended: false,
+      status: 'pending',
+      retryCount: 0,
       queueTime: DateTime.now(),
     })
   }
