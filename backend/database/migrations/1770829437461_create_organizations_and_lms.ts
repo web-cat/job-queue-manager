@@ -1,3 +1,25 @@
+// PURPOSE: Creates the LMS (Learning Management System) integration infrastructure.
+// Supports Canvas, Blackboard, and other LTI-compatible LMS platforms.
+
+// DESIGN: The circular foreign key between organization and lms_instance
+// (organization.id references lms_instance.id and vice versa) is a legacy
+// design from the Rails schema. It is preserved for compatibility but is unusual.
+// This constraint is added via schema.raw() after both tables are created to
+// avoid dependency ordering issues.
+
+// DEPENDENCIES: 1770829437460 (user table)
+
+// CONSUMERS: 1770829437462 (section references lms_instance), lti_identity,
+// lis_result_id
+
+// NEXT TEAM NOTES: The circular FK is intentional but fragile. When inserting
+// data, create the lms_instance first, then update organization with the ID.
+// VT uses Canvas as its primary LMS — lms_instance records for VT Canvas will
+// need to be seeded.
+
+// STATUS: complete [NEEDS INLINE DOCS — circular FK explanation in code]
+
+
 import { BaseSchema } from '@adonisjs/lucid/schema'
 
 export default class extends BaseSchema {

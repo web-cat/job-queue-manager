@@ -1,3 +1,25 @@
+// PURPOSE: Creates the exercise and question bank. Exercises are the atomic unit
+// of content — a single coding problem, multiple choice question, etc.
+// Exercise versions allow content to be updated without breaking historical data.
+
+// DESIGN: The exercise system uses a polymorphic actable pattern for prompts —
+// a prompt can be a coding_prompt, multiple_choice_prompt, etc. This is a
+// Rails STI (Single Table Inheritance) pattern preserved from the legacy schema.
+// IRT data (Item Response Theory) stores psychometric difficulty/discrimination
+// scores used for adaptive testing.
+
+// DEPENDENCIES: 1770829437462 (section for exercise_collections)
+
+// CONSUMERS: 1770829437464 (exercise_workouts links exercises to assignments)
+
+// NEXT TEAM NOTES: The actable_id/actable_type pattern on prompts and prompt_answers
+// is a polymorphic association. When loading a prompt, check actable_type to
+// determine which table to join for the actual prompt content. This is complex
+// to work with in Lucid — consider adding explicit computed properties to the
+// Prompt model.
+
+// STATUS: complete [NEEDS INLINE DOCS — actable/polymorphic pattern explanation]
+
 import { BaseSchema } from '@adonisjs/lucid/schema'
 
 export default class extends BaseSchema {
@@ -76,7 +98,11 @@ export default class extends BaseSchema {
       table.integer('experience').notNullable()
       table.integer('irt_data_id').nullable().references('id').inTable('irt_data')
       table.string('external_id', 255).nullable()
-      table.integer('exercise_collection_id').nullable().references('id').inTable('exercise_collections')
+      table
+        .integer('exercise_collection_id')
+        .nullable()
+        .references('id')
+        .inTable('exercise_collections')
       table.timestamps(true, true)
 
       table.index(['exercise_family_id'], 'index_exercises_on_exercise_family_id')
@@ -120,11 +146,21 @@ export default class extends BaseSchema {
 
     // ── Exercise Versions Resource Files (join) ───────────────────
     this.schema.createTable('exercise_versions_resource_files', (table) => {
-      table.integer('exercise_version_id').notNullable().references('id').inTable('exercise_versions')
+      table
+        .integer('exercise_version_id')
+        .notNullable()
+        .references('id')
+        .inTable('exercise_versions')
       table.integer('resource_file_id').notNullable().references('id').inTable('resource_files')
 
-      table.index(['exercise_version_id'], 'index_exercise_versions_resource_files_on_exercise_version_id')
-      table.index(['resource_file_id'], 'index_exercise_versions_resource_files_on_resource_file_id')
+      table.index(
+        ['exercise_version_id'],
+        'index_exercise_versions_resource_files_on_exercise_version_id'
+      )
+      table.index(
+        ['resource_file_id'],
+        'index_exercise_versions_resource_files_on_resource_file_id'
+      )
     })
 
     // ── Ownerships ────────────────────────────────────────────────
@@ -173,7 +209,10 @@ export default class extends BaseSchema {
       table.index(['tagger_id'], 'index_taggings_on_tagger_id')
       table.index(['context'], 'index_taggings_on_context')
       table.index(['tagger_id', 'tagger_type'], 'index_taggings_on_tagger_id_and_tagger_type')
-      table.index(['taggable_id', 'taggable_type', 'context'], 'index_taggings_on_taggable_id_and_taggable_type_and_context')
+      table.index(
+        ['taggable_id', 'taggable_type', 'context'],
+        'index_taggings_on_taggable_id_and_taggable_type_and_context'
+      )
     })
 
     // ── Coding Prompts ────────────────────────────────────────────
@@ -229,7 +268,11 @@ export default class extends BaseSchema {
     // ── Choices ───────────────────────────────────────────────────
     this.schema.createTable('choices', (table) => {
       table.increments('id')
-      table.integer('multiple_choice_prompt_id').notNullable().references('id').inTable('multiple_choice_prompts')
+      table
+        .integer('multiple_choice_prompt_id')
+        .notNullable()
+        .references('id')
+        .inTable('multiple_choice_prompts')
       table.integer('position').notNullable()
       table.text('answer').notNullable()
       table.text('feedback').nullable()
@@ -242,15 +285,26 @@ export default class extends BaseSchema {
     // ── Choices MC Prompt Answers (join) ──────────────────────────
     this.schema.createTable('choices_multiple_choice_prompt_answers', (table) => {
       table.integer('choice_id').nullable().references('id').inTable('choices')
-      table.integer('multiple_choice_prompt_answer_id').nullable().references('id').inTable('multiple_choice_prompt_answers')
+      table
+        .integer('multiple_choice_prompt_answer_id')
+        .nullable()
+        .references('id')
+        .inTable('multiple_choice_prompt_answers')
 
-      table.index(['multiple_choice_prompt_answer_id'], 'choices_MC_prompt_answers_MC_prompt_answer_id_fk')
+      table.index(
+        ['multiple_choice_prompt_answer_id'],
+        'choices_MC_prompt_answers_MC_prompt_answer_id_fk'
+      )
     })
 
     // ── Prompts ───────────────────────────────────────────────────
     this.schema.createTable('prompts', (table) => {
       table.increments('id')
-      table.integer('exercise_version_id').notNullable().references('id').inTable('exercise_versions')
+      table
+        .integer('exercise_version_id')
+        .notNullable()
+        .references('id')
+        .inTable('exercise_versions')
       table.text('question').notNullable()
       table.integer('position').notNullable()
       table.text('feedback').nullable()
@@ -320,8 +374,14 @@ export default class extends BaseSchema {
       table.timestamps(true, true)
 
       table.index(['namespace'], 'index_active_admin_comments_on_namespace')
-      table.index(['author_type', 'author_id'], 'index_active_admin_comments_on_author_type_and_author_id')
-      table.index(['resource_type', 'resource_id'], 'index_active_admin_comments_on_resource_type_and_resource_id')
+      table.index(
+        ['author_type', 'author_id'],
+        'index_active_admin_comments_on_author_type_and_author_id'
+      )
+      table.index(
+        ['resource_type', 'resource_id'],
+        'index_active_admin_comments_on_resource_type_and_resource_id'
+      )
     })
   }
 

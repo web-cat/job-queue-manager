@@ -1,3 +1,6 @@
+// PURPOSE: Tracks a user's experience points and completed exercises within
+// a specific tag category. Used for gamification and progress tracking.
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'

@@ -1,3 +1,6 @@
+// PURPOSE: Per-student deadline extensions for assignment offerings. Overrides
+// the default dates in assignment_offering for specific students.
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'

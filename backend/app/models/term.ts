@@ -1,3 +1,6 @@
+// PURPOSE: Academic term (Fall 2024, Spring 2025). Season is an integer enum.
+// All sections belong to a term.
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, hasMany } from '@adonisjs/lucid/orm'
 import type { HasMany } from '@adonisjs/lucid/types/relations'

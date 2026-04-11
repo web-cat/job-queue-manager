@@ -1,3 +1,6 @@
+// PURPOSE: Stores human-readable URL slugs for courses and other resources.
+// Maps /courses/cs3214-fall-2024 to the correct database record.
+
 import { DateTime } from 'luxon'
 import { BaseModel, column } from '@adonisjs/lucid/orm'
 

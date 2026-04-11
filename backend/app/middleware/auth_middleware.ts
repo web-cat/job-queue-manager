@@ -1,3 +1,16 @@
+// PURPOSE: Protects routes from unauthenticated access. Verifies the API token
+// in the Authorization header and populates auth.user for downstream use.
+
+// DESIGN: Provided by the AdonisJS starter kit. Uses authenticateUsing() which
+// tries each specified guard in order. The redirectTo URL is used for web
+// sessions — for API routes this is ignored as 401 is returned directly.
+
+// DEPENDENCIES: AdonisJS auth package, auth_access_tokens table
+
+// CONSUMERS: kernel.ts (registered as named middleware), routes.ts
+
+// STATUS: complete (starter kit file — do not modify)
+
 import type { HttpContext } from '@adonisjs/core/http'
 import type { NextFn } from '@adonisjs/core/types/http'
 import type { Authenticators } from '@adonisjs/auth/types'

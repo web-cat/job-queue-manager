@@ -1,3 +1,6 @@
+// PURPOSE: Defines sharing/reuse rules for exercise collections — whether
+// they can be forked, who can view them.
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, hasMany } from '@adonisjs/lucid/orm'
 import type { HasMany } from '@adonisjs/lucid/types/relations'

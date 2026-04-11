@@ -1,3 +1,20 @@
+// PURPOSE: Registers all middleware with the AdonisJS HTTP server and router.
+// Defines which middleware run on every request (server middleware) vs only
+// on matched routes (router middleware) vs only when explicitly assigned
+// (named middleware).
+// DESIGN: server middleware (container_bindings, force_json_response, cors) run
+// on all requests. router middleware (bodyparser, initialize_auth) run on
+// matched routes. Named middleware (auth, admin) must be explicitly assigned
+// to routes in routes.ts. The force_json_response middleware ensures all
+// responses are JSON — important for an API-only backend.
+
+// DEPENDENCIES: All middleware files
+
+// CONSUMERS: AdonisJS server startup
+
+// NEXT TEAM NOTES: When adding new named middleware (e.g. a rate limiter, an
+// IP whitelist for webhooks), register it here first then use it in routes.ts.
+
 /*
 |--------------------------------------------------------------------------
 | HTTP kernel file
@@ -7,7 +24,6 @@
 | or the router.
 |
 */
-
 import router from '@adonisjs/core/services/router'
 import server from '@adonisjs/core/services/server'
 
@@ -32,12 +48,16 @@ server.use([
  * The router middleware stack runs middleware on all the HTTP
  * requests with a registered route.
  */
-router.use([() => import('@adonisjs/core/bodyparser_middleware'), () => import('@adonisjs/auth/initialize_auth_middleware')])
+router.use([
+  () => import('@adonisjs/core/bodyparser_middleware'),
+  () => import('@adonisjs/auth/initialize_auth_middleware'),
+])
 
 /**
  * Named middleware collection must be explicitly assigned to
  * the routes or the routes group.
  */
 export const middleware = router.named({
-  auth: () => import('#middleware/auth_middleware')
+  auth: () => import('#middleware/auth_middleware'),
+  admin: () => import('#middleware/admin_middleware'),
 })

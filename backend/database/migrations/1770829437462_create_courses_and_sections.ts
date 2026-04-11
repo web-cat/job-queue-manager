@@ -1,3 +1,20 @@
+// PURPOSE: Creates the course management structure. A course is an abstract
+// definition (CS 3214), a section is a specific offering of that course in
+// a given term (CS 3214 Fall 2024, Section 1).
+
+// DESIGN: The section table is named section but serves as the course_offering
+// concept — one course can have many sections across many terms. course_enrollment
+// links users to sections with a specific role (student, instructor, TA) via
+// course_role. friendly_id_slugs supports human-readable URL slugs for courses.
+
+// DEPENDENCIES: 1770829437461 (organization, lms_instance)
+
+// CONSUMERS: 1770829437464 (assignment_offering references section)
+
+// NEXT TEAM NOTES: When querying a student's courses, join through
+// course_enrollment using user_id and course_offering_id (which is section.id).
+// The naming is confusing — course_offering_id in many tables means section.id.
+
 import { BaseSchema } from '@adonisjs/lucid/schema'
 
 export default class extends BaseSchema {

@@ -1,3 +1,9 @@
+// PURPOSE: Stores the LTI grade passback endpoint for a specific user/assignment
+// combination. Used to send grades back to the LMS after submission is graded.
+// NEXT TEAM NOTES: Grade passback requires calling the lis_outcome_service_url
+// with the lis_result_sourcedid token. This is the LTI 1.1 grade passback flow.
+// LTI 1.3 uses a different mechanism (Assignment and Grade Services).
+
 import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'
 import User from './user.js'

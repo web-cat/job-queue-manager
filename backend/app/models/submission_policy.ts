@@ -1,3 +1,12 @@
+// PURPOSE: Rules for how an assignment can be submitted — attempt limits, late
+// penalties, early bonuses, partner submission settings, time banks.
+// Very complex legacy object with many configuration options.
+
+// NEXT TEAM NOTES: Most fields have sensible defaults. The submisison_method
+// field (note: intentional typo from legacy schema) is a smallint enum — 0
+// is the standard method. Do not fix the typo — it matches the DB column name.
+// STATUS: complete [NEEDS INLINE DOCS — submisison_method typo explanation]
+
 import { DateTime } from 'luxon'
 import { BaseModel, column } from '@adonisjs/lucid/orm'
 

@@ -1,3 +1,6 @@
+// PURPOSE: The type of LMS (Canvas, Blackboard, Moodle). Used to configure
+// LMS-specific behavior in lms_instance records.
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, hasMany } from '@adonisjs/lucid/orm'
 import type { HasMany } from '@adonisjs/lucid/types/relations'

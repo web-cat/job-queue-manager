@@ -1,3 +1,6 @@
+// PURPOSE: A group of users that can be granted shared access to exercise
+// collections and courses. Used for collaborative authoring.
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, hasMany } from '@adonisjs/lucid/orm'
 import type { HasMany } from '@adonisjs/lucid/types/relations'

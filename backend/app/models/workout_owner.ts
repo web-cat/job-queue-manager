@@ -1,3 +1,6 @@
+// PURPOSE: Links an assignment to its owner users — separate from the creator_id
+// on assignment, allows multiple ownership.
+
 import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'
 import User from './user.js'

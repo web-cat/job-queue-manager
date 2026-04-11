@@ -1,3 +1,7 @@
+// PURPOSE: Defines permissions within a course (student, instructor, TA).
+// Uses boolean flags for fine-grained control. The builtin flag marks
+// system-defined roles that should not be deleted.
+
 import { BaseModel, column } from '@adonisjs/lucid/orm'
 
 export default class CourseRole extends BaseModel {

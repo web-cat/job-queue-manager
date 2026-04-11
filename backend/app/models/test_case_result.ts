@@ -1,3 +1,6 @@
+// PURPOSE: The result of running a specific test case against a student's
+// coding_prompt_answer — pass/fail and execution feedback.
+
 import { DateTime } from 'luxon'
 import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'
