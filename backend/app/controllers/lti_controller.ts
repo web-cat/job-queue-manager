@@ -1,8 +1,8 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import env from '#start/env'
-import User from '#models/user.js'
-import LtiService from '#services/lti_service.js'
-import LisResultId from '#models/lis_result_id.js'
+import User from '#models/user'
+import LtiService from '#services/lti_service'
+import LisResultId from '#models/lis_result_id'
 
 /**
  * LtiController

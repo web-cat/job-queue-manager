@@ -1,10 +1,9 @@
-import lti from 'ims-lti'
+const lti = require('ims-lti')
 import axios from 'axios'
 import LmsInstance from '#models/lms_instance'
 import LtiIdentity from '#models/lti_identity'
 import LisResultId from '#models/lis_result_id'
 import User from '#models/user'
-import AssignmentOffering from '#models/assignment_offering'
 
 /**
  * LtiService
@@ -179,8 +178,8 @@ export default class LtiService {
   async sendGrade(
     lisOutcomeServiceUrl: string,
     lisResultSourcedid: string,
-    consumerKey: string,
-    consumerSecret: string,
+    _consumerKey: string,
+    _consumerSecret: string,
     score: number
   ): Promise<boolean> {
     // Score must be 0.0 to 1.0
