@@ -28,7 +28,8 @@ import vine from '@vinejs/vine'
 
 const registerValidator = vine.compile(
   vine.object({
-    fullName: vine.string().trim().minLength(1),
+    firstName: vine.string().trim().minLength(1),
+    lastName: vine.string().trim().minLength(1),
     email: vine.string().email().normalizeEmail(),
     password: vine.string().minLength(8),
   })
@@ -62,7 +63,15 @@ export default class AuthController {
       return response.conflict({ message: 'A user with this email already exists' })
     }
 
-    const user = await User.create(data)
+    const user = await User.create({
+      firstName: data.firstName,
+      lastName: data.lastName,
+      email: data.email,
+      encryptedPassword: data.password,
+      globalRoleId: 3, // Student by default (requires seed migration to have run)
+      signInCount: 0,
+      slug: data.email.split('@')[0], // e.g. "test" from "test@vt.edu"
+    })
     const token = await User.accessTokens.create(user)
 
     return response.created({ token })
