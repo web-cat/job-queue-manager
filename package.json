@@ -16,5 +16,15 @@
     "migration:rollback": "pnpm --filter backend ace migration:rollback",
     "lint": "pnpm --recursive lint",
     "typecheck": "pnpm --recursive typecheck"
+  },
+  "pnpm": {
+    "overrides": {
+      "flatted": ">=3.4.2",
+      "picomatch": ">=4.0.4",
+      "brace-expansion": ">=2.0.3",
+      "defu": ">=6.1.5",
+      "yaml": ">=2.8.3",
+      "file-type": ">=21.3.2"
+    }
   }
 }
