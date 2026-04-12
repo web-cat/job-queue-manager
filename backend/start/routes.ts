@@ -34,6 +34,7 @@ import { middleware } from '#start/kernel'
 
 const AuthController = () => import('#controllers/auth_controller')
 const CasController = () => import('#controllers/cas_controller')
+const LtiController = () => import('#controllers/lti_controller')
 const SubmissionsController = () => import('#controllers/submissions_controller')
 const AssignmentsController = () => import('#controllers/assignments_controller')
 const CoursesController = () => import('#controllers/courses_controller')
@@ -53,6 +54,11 @@ router.get('/api/auth/cas', [CasController, 'redirect'])
 router.get('/api/auth/cas/callback', [CasController, 'callback'])
 router.get('/api/auth/cas/logout', [CasController, 'logout'])
 
+// ── LTI routes (public — Canvas POSTs directly with OAuth signature) ─
+// Security is provided by OAuth HMAC-SHA1 signature validation,
+// not by API token auth. These MUST remain public.
+router.post('/api/lti/launch', [LtiController, 'launch'])
+
 // ── Webhook from other team — public but should be IP restricted ─────
 // TODO: Add IP restriction middleware once other team confirms their IPs
 router.post('/api/submissions/webhook', [SubmissionsController, 'webhook'])
@@ -66,6 +72,9 @@ router
     router.post('/auth/tokens', [AuthController, 'createToken'])
     router.get('/auth/tokens', [AuthController, 'listTokens'])
     router.delete('/auth/tokens/:id', [AuthController, 'revokeToken'])
+
+    // LTI grade passback — protected, called internally after grading
+    router.post('/lti/grade', [LtiController, 'grade'])
 
     // Submissions
     router.get('/submissions/:id/result', [SubmissionsController, 'result'])
