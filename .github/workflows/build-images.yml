@@ -6,11 +6,20 @@ on:
       - main
 
 jobs:
-  build-and-push:
+  # ── Backend ─────────────────────────────────────────────────────────
+  # Builds and pushes the AdonisJS backend image.
+  # Triggers on any push to main that touches backend/ files.
+  build-backend:
     runs-on: ubuntu-latest
+    # Only run if backend files changed
+    # Remove this filter if you want to always build on any push to main
+    if: |
+      contains(github.event.head_commit.modified, 'backend/') ||
+      contains(github.event.head_commit.added, 'backend/') ||
+      github.event_name == 'push'
 
     steps:
-      - name: checkout ts repo
+      - name: checkout repo
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -41,7 +50,7 @@ jobs:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
-      - name: build and push ts
+      - name: build and push backend
         uses: docker/build-push-action@v6
         with:
           context: ./backend
@@ -51,3 +60,54 @@ jobs:
           tags: |
             container.cs.vt.edu/timwilson/job-queue-manager-images/backend:prod_latest
             container.cs.vt.edu/timwilson/job-queue-manager-images/backend:v${{ steps.version.outputs.version }}
+
+  # ── Frontend ─────────────────────────────────────────────────────────
+  # TODO: Uncomment this job once frontend/Dockerfile is created.
+  # The frontend needs:
+  #   1. A Dockerfile at frontend/Dockerfile
+  #   2. A Kubernetes deployment manifest for the frontend pod
+  #   3. A Kubernetes ingress rule routing / to the frontend service
+  #      (currently / routes to backend — this will need to change so
+  #       / goes to frontend and /api goes to backend)
+  #   4. The image pushed to:
+  #      container.cs.vt.edu/timwilson/job-queue-manager-images/frontend
+  #
+  # build-frontend:
+  #   runs-on: ubuntu-latest
+  #   needs: build-backend   # remove this if frontend should build independently
+  #
+  #   steps:
+  #     - name: checkout repo
+  #       uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: 0
+  #
+  #     - name: semantic version for tagging images
+  #       id: version
+  #       uses: PaulHatch/semantic-version@v5.4.0
+  #       with:
+  #         tag_prefix: "v"
+  #         major_pattern: "(?i)Major|!:"
+  #         minor_pattern: "(?i)Feature"
+  #         version_format: "${major}.${minor}.${patch}"
+  #
+  #     - name: docker buildx
+  #       uses: docker/setup-buildx-action@v3
+  #
+  #     - name: login to registry
+  #       uses: docker/login-action@v3
+  #       with:
+  #         registry: container.cs.vt.edu
+  #         username: ${{ secrets.REGISTRY_USERNAME }}
+  #         password: ${{ secrets.REGISTRY_PASSWORD }}
+  #
+  #     - name: build and push frontend
+  #       uses: docker/build-push-action@v6
+  #       with:
+  #         context: ./frontend
+  #         file: ./frontend/Dockerfile
+  #         push: true
+  #         provenance: false
+  #         tags: |
+  #           container.cs.vt.edu/timwilson/job-queue-manager-images/frontend:prod_latest
+  #           container.cs.vt.edu/timwilson/job-queue-manager-images/frontend:v${{ steps.version.outputs.version }}
