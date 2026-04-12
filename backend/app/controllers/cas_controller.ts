@@ -113,9 +113,8 @@ export default class CasController {
             slug: casUser.pid,
             signInCount: 0,
             // globalRoleId must reference a seeded global_role record
-            // Default to the lowest privilege role (id: 2 = student)
-            // TODO: Seed global_role table with admin (id:1) and student (id:2)
-            globalRoleId: 2,
+            // globalRoleId: 1 = Admin, 2 = Instructor, 3 = Student
+            globalRoleId: 3, // All CAS logins default to Student
           }
         )
 
