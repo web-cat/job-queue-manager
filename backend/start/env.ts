@@ -32,10 +32,28 @@ export default await Env.create(new URL('../', import.meta.url), {
   /*
   |----------------------------------------------------------
   | Variables for VT CAS authentication
-  | CAS only works on the Discovery cluster — not localhost.
+  |
+  | Optional — local dev works without these.
+  | CAS login will fail gracefully if not set.
+  | Required on Discovery cluster for auth to work.
+  |
+  | CAS_BASE_URL     → VT CS CAS server base URL
+  | CAS_SERVICE_URL  → your app's callback URL (must be cluster URL)
+  | FRONTEND_URL     → where to redirect after successful auth
   |----------------------------------------------------------
   */
   CAS_BASE_URL: Env.schema.string.optional(),
   CAS_SERVICE_URL: Env.schema.string.optional(),
   FRONTEND_URL: Env.schema.string.optional(),
+
+  /*
+  |----------------------------------------------------------
+  | Variables for job queue integration with other team
+  |
+  | Optional — stubbed until other team confirms their API.
+  | Fill these in when the other team provides their endpoint.
+  |----------------------------------------------------------
+  */
+  JOB_QUEUE_API_URL: Env.schema.string.optional(),
+  JOB_QUEUE_API_KEY: Env.schema.string.optional(),
 })

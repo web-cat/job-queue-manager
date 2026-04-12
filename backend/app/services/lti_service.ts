@@ -117,7 +117,7 @@ export default class LtiService {
         // TODO: Assign role based on LTI role claim
         // provider.student → globalRoleId: 2 (Student)
         // provider.instructor → globalRoleId: 1 (Admin)
-        globalRoleId: provider.student ? 2 : 1,
+        globalRoleId: provider.student ? 3 : 2, // student=3, instructor=2
       }
     )
 
