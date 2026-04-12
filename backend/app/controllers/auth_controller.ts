@@ -23,6 +23,7 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import User from '#models/user'
 import vine from '@vinejs/vine'
+import hash from '@adonisjs/core/services/hash'
 
 // ── Validators ───────────────────────────────────────────────────────
 
@@ -63,14 +64,17 @@ export default class AuthController {
       return response.conflict({ message: 'A user with this email already exists' })
     }
 
+    const hashedPassword = await hash.use('scrypt').make(data.password)
+    console.log('Hashed password:', hashedPassword) // confirm it's actually hashing
+
     const user = await User.create({
       firstName: data.firstName,
       lastName: data.lastName,
       email: data.email,
-      encryptedPassword: data.password,
-      globalRoleId: 3, // Student by default (requires seed migration to have run)
+      encryptedPassword: hashedPassword,
+      globalRoleId: 3,
       signInCount: 0,
-      slug: data.email.split('@')[0], // e.g. "test" from "test@vt.edu"
+      slug: data.email.split('@')[0],
     })
     const token = await User.accessTokens.create(user)
 
@@ -82,10 +86,13 @@ export default class AuthController {
    */
   async login({ request, response }: HttpContext) {
     const { email, password } = await request.validateUsing(loginValidator)
-    const user = await User.verifyCredentials(email, password)
-    const token = await User.accessTokens.create(user)
-
-    return response.ok({ token })
+    try {
+      const user = await User.verifyCredentials(email, password)
+      const token = await User.accessTokens.create(user)
+      return response.ok({ token })
+    } catch {
+      return response.unauthorized({ message: 'Invalid email or password.' })
+    }
   }
 
   /**

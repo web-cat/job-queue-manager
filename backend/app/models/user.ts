@@ -36,7 +36,10 @@ import LtiIdentity from './lti_identity.js'
 
 const AuthFinder = withAuthFinder(() => hash.use('scrypt'), {
   uids: ['email'],
-  passwordColumnName: 'encrypted_password',
+  // Must use camelCase property name, not the DB snake_case column name.
+  // Lucid stores attributes internally by camelCase key — $getAttribute('encrypted_password')
+  // returns undefined but $getAttribute('encryptedPassword') works correctly.
+  passwordColumnName: 'encryptedPassword',
 })
 
 export default class User extends compose(BaseModel, AuthFinder) {
