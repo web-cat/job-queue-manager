@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useAuthStore } from "#imports";
 
-definePageMeta({ layout: "default" });
+definePageMeta({ middleware: "guest" });
 
 const authStore = useAuthStore();
 const config = useRuntimeConfig();

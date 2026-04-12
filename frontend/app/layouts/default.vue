@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { useAuthStore } from "#imports";
+import { useAuthStore } from "~/stores/auth";
 
 const authStore = useAuthStore();
 const route = useRoute();
 
-// Hide nav on auth pages
-const isAuthPage = computed(() =>
-  ["/login", "/auth/callback", "/lti/launch"].some((p) =>
-    route.path.startsWith(p),
-  ),
+// Hide nav on auth pages only
+const isAuthPage = computed(
+  () =>
+    route.path === "/login" ||
+    route.path.startsWith("/auth/") ||
+    route.path.startsWith("/lti/"),
 );
 
 const navLinks = [
@@ -25,13 +26,18 @@ const navLinks = [
   },
   { label: "Courses", to: "/courses", icon: "i-heroicons-academic-cap" },
 ];
+
+async function handleLogout() {
+  await authStore.logout();
+}
 </script>
 
 <template>
   <div class="min-h-screen bg-gray-50 dark:bg-gray-950">
-    <!-- Top nav bar -->
+    <!-- Top nav — shown on all non-auth pages regardless of auth state -->
+    <!-- Auth middleware handles redirecting unauthenticated users before they see this -->
     <header
-      v-if="!isAuthPage && authStore.isAuthenticated"
+      v-if="!isAuthPage"
       class="sticky top-0 z-50 border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md"
     >
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -68,31 +74,30 @@ const navLinks = [
             </NuxtLink>
           </nav>
 
-          <!-- User menu -->
-          <div class="flex items-center gap-3">
+          <!-- Right side actions -->
+          <div class="flex items-center gap-2">
             <UColorModeButton />
-            <UDropdownMenu
-              :items="[
-                [
-                  {
-                    label: authStore.fullName ?? authStore.user?.email ?? '',
-                    disabled: true,
-                  },
-                  { type: 'separator' },
-                  {
-                    label: 'Sign out',
-                    icon: 'i-heroicons-arrow-right-on-rectangle',
-                    onSelect: () => authStore.logout(),
-                  },
-                ],
-              ]"
-            >
-              <UAvatar
-                :alt="authStore.initials"
+
+            <!-- User info + sign out -->
+            <div class="flex items-center gap-2">
+              <span
+                v-if="authStore.user"
+                class="hidden sm:block text-sm text-gray-600 dark:text-gray-400 font-mono"
+              >
+                {{ authStore.user.slug }}
+              </span>
+
+              <!-- Sign out button — always visible -->
+              <UButton
+                variant="ghost"
                 size="sm"
-                class="cursor-pointer ring-2 ring-[#861F41]/20 hover:ring-[#861F41]/60 transition-all"
-              />
-            </UDropdownMenu>
+                icon="i-heroicons-arrow-right-on-rectangle"
+                :loading="false"
+                @click="handleLogout"
+              >
+                <span class="hidden sm:inline">Sign out</span>
+              </UButton>
+            </div>
           </div>
         </div>
       </div>
