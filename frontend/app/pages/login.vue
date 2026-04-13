@@ -35,36 +35,15 @@ async function handleLogin() {
   loading.value = true;
   console.log("1. handleLogin started");
   try {
-    console.log("2. calling authStore.login with:", form.email);
     await authStore.login(form.email, form.password);
-    console.log("3. login completed, token:", authStore.token?.slice(0, 20));
     const redirect = route.query.redirect as string | undefined;
-    console.log("4. navigating to:", redirect ?? "/dashboard");
     await navigateTo(redirect ?? "/dashboard");
-    console.log("5. navigation completed");
   } catch (e: any) {
-    console.log("ERROR:", e);
-    console.log("ERROR data:", e?.data);
-    console.log("ERROR message:", e?.message);
     error.value = e?.data?.message ?? "Invalid email or password.";
   } finally {
-    console.log("6. finally block - setting loading false");
     loading.value = false;
   }
 }
-// async function handleLogin() {
-//   error.value = null;
-//   loading.value = true;
-//   try {
-//     await authStore.login(form.email, form.password);
-//     const redirect = route.query.redirect as string | undefined;
-//     await navigateTo(redirect ?? "/dashboard");
-//   } catch (e: any) {
-//     error.value = e?.data?.message ?? "Invalid email or password.";
-//   } finally {
-//     loading.value = false;
-//   }
-// }
 </script>
 
 <template>

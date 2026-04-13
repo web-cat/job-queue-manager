@@ -103,17 +103,11 @@ export const useAuthStore = defineStore(
     // }
     async function login(email: string, password: string): Promise<void> {
       const config = useRuntimeConfig();
-      console.log(
-        "store.login: calling",
-        `${config.public.apiBase}/api/auth/login`,
-      );
-      const data = await $fetch<{ token: { value: string } }>(
+      const data = await $fetch<{ token: { token: string } }>(
         `${config.public.apiBase}/api/auth/login`,
         { method: "POST", body: { email, password } },
       );
-      console.log("store.login: got response", data);
-      await setToken(data.token.value);
-      console.log("store.login: token set", token.value?.slice(0, 20));
+      await setToken(data.token.token); // ← was data.token.value
     }
 
     /**
