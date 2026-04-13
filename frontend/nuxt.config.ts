@@ -12,7 +12,15 @@ export default defineNuxtConfig({
   modules: ["@pinia/nuxt", "@nuxt/ui"],
 
   vite: {
+    optimizeDeps: {
+      include: ["pinia-plugin-persistedstate"],
+    },
     plugins: [tailwindcss()],
+    server: {
+      watch: {
+        ignored: ["**/node_modules/**", "**/.nuxt/**", "**/.output/**"],
+      },
+    },
   },
 
   css: ["~/assets/css/main.css"],
@@ -33,12 +41,6 @@ export default defineNuxtConfig({
     public: {
       apiBase: process.env.NUXT_PUBLIC_API_BASE ?? "http://localhost:3333",
     },
-  },
-
-  // Nuxt UI color mode
-  colorMode: {
-    preference: "system",
-    fallback: "light",
   },
 
   // App-wide head config

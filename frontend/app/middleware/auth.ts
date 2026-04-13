@@ -1,4 +1,4 @@
-import { useAuthStore } from "#imports";
+import { useAuthStore } from "~/stores/auth";
 
 /**
  * auth middleware
@@ -6,41 +6,20 @@ import { useAuthStore } from "#imports";
  * Protects routes from unauthenticated access.
  * Add to any page with: definePageMeta({ middleware: 'auth' })
  *
- * On first load, attempts to restore session from localStorage token.
- * If no valid token, redirects to /login.
+ * Token and user are restored automatically from localStorage by
+ * pinia-plugin-persistedstate — no manual init() call needed here.
  */
-
-// export default defineNuxtRouteMiddleware(async (to) => {
-//   // Skip on server — no localStorage available
-//   if (import.meta.server) return;
-
-//   const authStore = useAuthStore();
-
-//   authStore.init();
-
-//   if (!authStore.token) {
-//     return navigateTo(`/login?redirect=${encodeURIComponent(to.fullPath)}`);
-//   }
-
-//   if (!authStore.user) {
-//     await authStore.fetchUser();
-//   }
-// });
 export default defineNuxtRouteMiddleware(async (to) => {
+  // Skip on server — localStorage only exists on client
   if (import.meta.server) return;
 
   const authStore = useAuthStore();
 
-  console.log("Before init - token:", authStore.token);
-  authStore.init();
-  console.log("After init - token:", authStore.token);
-  console.log("localStorage token:", localStorage.getItem("auth_token"));
-
   if (!authStore.token) {
-    console.log("No token, redirecting to login");
     return navigateTo(`/login?redirect=${encodeURIComponent(to.fullPath)}`);
   }
 
+  // Fetch user profile if token exists but user not loaded yet
   if (!authStore.user) {
     await authStore.fetchUser();
   }

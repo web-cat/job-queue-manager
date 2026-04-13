@@ -1,22 +1,21 @@
 <script setup lang="ts">
-import { useAuthStore } from "#imports";
+import { useAuthStore } from "~/stores/auth";
 
-definePageMeta({ middleware: "guest" });
+// Guest middleware handles redirect if already authenticated
+definePageMeta({
+  layout: false, // Login has its own full-screen layout
+  middleware: "guest",
+});
 
 const authStore = useAuthStore();
 const config = useRuntimeConfig();
 const route = useRoute();
 
-// Redirect if already authenticated
-if (authStore.isAuthenticated) {
-  await navigateTo("/dashboard");
-}
-
 const form = reactive({ email: "", password: "" });
 const loading = ref(false);
 const error = ref<string | null>(null);
 
-// Show error from CAS/LTI redirect
+// Show error from CAS/LTI redirect query param
 if (route.query.error) {
   const errorMessages: Record<string, string> = {
     no_ticket: "CAS login failed — no ticket received.",
@@ -34,16 +33,38 @@ const casLoginUrl = computed(() => `${config.public.apiBase}/api/auth/cas`);
 async function handleLogin() {
   error.value = null;
   loading.value = true;
+  console.log("1. handleLogin started");
   try {
+    console.log("2. calling authStore.login with:", form.email);
     await authStore.login(form.email, form.password);
+    console.log("3. login completed, token:", authStore.token?.slice(0, 20));
     const redirect = route.query.redirect as string | undefined;
+    console.log("4. navigating to:", redirect ?? "/dashboard");
     await navigateTo(redirect ?? "/dashboard");
+    console.log("5. navigation completed");
   } catch (e: any) {
+    console.log("ERROR:", e);
+    console.log("ERROR data:", e?.data);
+    console.log("ERROR message:", e?.message);
     error.value = e?.data?.message ?? "Invalid email or password.";
   } finally {
+    console.log("6. finally block - setting loading false");
     loading.value = false;
   }
 }
+// async function handleLogin() {
+//   error.value = null;
+//   loading.value = true;
+//   try {
+//     await authStore.login(form.email, form.password);
+//     const redirect = route.query.redirect as string | undefined;
+//     await navigateTo(redirect ?? "/dashboard");
+//   } catch (e: any) {
+//     error.value = e?.data?.message ?? "Invalid email or password.";
+//   } finally {
+//     loading.value = false;
+//   }
+// }
 </script>
 
 <template>
@@ -52,7 +73,6 @@ async function handleLogin() {
     <div
       class="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 bg-[#0A1628] relative overflow-hidden"
     >
-      <!-- Background pattern -->
       <div class="absolute inset-0 opacity-10">
         <div
           class="absolute inset-0"
@@ -69,7 +89,6 @@ async function handleLogin() {
         />
       </div>
 
-      <!-- Logo -->
       <div class="relative z-10 flex items-center gap-3">
         <div
           class="w-10 h-10 rounded-xl bg-[#861F41] flex items-center justify-center"
@@ -81,15 +100,13 @@ async function handleLogin() {
         >
       </div>
 
-      <!-- Hero text -->
       <div class="relative z-10">
         <h1 class="text-4xl font-bold text-white leading-tight mb-4">
           Submit. Queue.<br />
           <span class="text-[#861F41]">Grade.</span>
         </h1>
         <p class="text-gray-400 text-lg leading-relaxed max-w-sm">
-          The VT CS code submission and automated grading platform. Submit your
-          assignments and get instant feedback.
+          The VT CS code submission and automated grading platform.
         </p>
         <div class="mt-8 flex items-center gap-6">
           <div class="text-center">
@@ -109,7 +126,6 @@ async function handleLogin() {
         </div>
       </div>
 
-      <!-- Bottom note -->
       <div class="relative z-10 text-gray-600 text-xs font-mono">
         Virginia Tech · Computer Science Department
       </div>
@@ -141,7 +157,6 @@ async function handleLogin() {
           </p>
         </div>
 
-        <!-- Error alert -->
         <UAlert
           v-if="error"
           color="error"
@@ -171,8 +186,9 @@ async function handleLogin() {
           <div class="relative flex justify-center">
             <span
               class="px-3 bg-gray-50 dark:bg-gray-950 text-xs text-gray-500 font-mono"
-              >or sign in locally</span
             >
+              or sign in locally
+            </span>
           </div>
         </div>
 

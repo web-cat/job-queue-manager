@@ -4,9 +4,10 @@ import { useAuthStore } from "~/stores/auth";
 const authStore = useAuthStore();
 const route = useRoute();
 
-// Hide nav on auth pages only
+// Auth pages use their own full-screen layout — no nav needed
 const isAuthPage = computed(
   () =>
+    route.path === "/" ||
     route.path === "/login" ||
     route.path.startsWith("/auth/") ||
     route.path.startsWith("/lti/"),
@@ -26,24 +27,19 @@ const navLinks = [
   },
   { label: "Courses", to: "/courses", icon: "i-heroicons-academic-cap" },
 ];
-
-async function handleLogout() {
-  await authStore.logout();
-}
 </script>
 
 <template>
   <div class="min-h-screen bg-gray-50 dark:bg-gray-950">
-    <!-- Top nav — shown on all non-auth pages regardless of auth state -->
-    <!-- Auth middleware handles redirecting unauthenticated users before they see this -->
+    <!-- Nav only shown when authenticated AND not on auth pages -->
     <header
-      v-if="!isAuthPage"
+      v-if="!isAuthPage && authStore.isAuthenticated"
       class="sticky top-0 z-50 border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md"
     >
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-16">
           <!-- Logo -->
-          <NuxtLink to="/dashboard" class="flex items-center gap-3 group">
+          <NuxtLink to="/dashboard" class="flex items-center gap-3">
             <div
               class="w-8 h-8 rounded-lg bg-[#861F41] flex items-center justify-center"
             >
@@ -74,36 +70,28 @@ async function handleLogout() {
             </NuxtLink>
           </nav>
 
-          <!-- Right side actions -->
+          <!-- Right actions -->
           <div class="flex items-center gap-2">
             <UColorModeButton />
-
-            <!-- User info + sign out -->
-            <div class="flex items-center gap-2">
-              <span
-                v-if="authStore.user"
-                class="hidden sm:block text-sm text-gray-600 dark:text-gray-400 font-mono"
-              >
-                {{ authStore.user.slug }}
-              </span>
-
-              <!-- Sign out button — always visible -->
-              <UButton
-                variant="ghost"
-                size="sm"
-                icon="i-heroicons-arrow-right-on-rectangle"
-                :loading="false"
-                @click="handleLogout"
-              >
-                <span class="hidden sm:inline">Sign out</span>
-              </UButton>
-            </div>
+            <span
+              v-if="authStore.user"
+              class="hidden sm:block text-sm text-gray-500 dark:text-gray-400 font-mono"
+            >
+              {{ authStore.user.slug }}
+            </span>
+            <UButton
+              variant="ghost"
+              size="sm"
+              icon="i-heroicons-arrow-right-on-rectangle"
+              @click="authStore.logout()"
+            >
+              <span class="hidden sm:inline">Sign out</span>
+            </UButton>
           </div>
         </div>
       </div>
     </header>
 
-    <!-- Page content -->
     <main>
       <slot />
     </main>
