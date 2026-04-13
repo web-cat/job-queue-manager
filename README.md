@@ -149,7 +149,7 @@ kubectl port-forward svc/postgres 5432:5432 -n 22012-job-queue-manager
 **Terminal 2 — AdonisJS backend:**
 
 ```bash
-cd backend && node ace serve --watch
+cd backend && node ace serve --watch --poll
 ```
 
 **Terminal 3 — Nuxt frontend:**
