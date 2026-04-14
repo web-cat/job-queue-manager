@@ -1,0 +1,74 @@
+apiVersion: v1
+items:
+- apiVersion: networking.k8s.io/v1
+  kind: Ingress
+  metadata:
+    annotations:
+      field.cattle.io/publicEndpoints: '[{"addresses":["192.168.5.91","192.168.5.92","192.168.5.93"],"port":80,"protocol":"HTTP","serviceName":"22012-job-queue-manager:adminer","ingressName":"22012-job-queue-manager:adminer-ingress","hostname":"webcatmaxxers.discovery.cs.vt.edu","path":"/db","allNodes":false}]'
+      nginx.ingress.kubernetes.io/whitelist-source-range: 0.0.0.0/0,::/0
+    creationTimestamp: "2026-03-04T15:20:27Z"
+    generation: 1
+    name: adminer-ingress
+    namespace: 22012-job-queue-manager
+    resourceVersion: "471660489"
+    uid: fa38ccae-37d2-42eb-aab3-258fc1dc00fe
+  spec:
+    rules:
+    - host: webcatmaxxers.discovery.cs.vt.edu
+      http:
+        paths:
+        - backend:
+            service:
+              name: adminer
+              port:
+                number: 8080
+          path: /db
+          pathType: Prefix
+  status:
+    loadBalancer:
+      ingress:
+      - ip: 192.168.5.91
+      - ip: 192.168.5.92
+      - ip: 192.168.5.93
+- apiVersion: networking.k8s.io/v1
+  kind: Ingress
+  metadata:
+    annotations:
+      field.cattle.io/publicEndpoints: '[{"addresses":["192.168.5.91","192.168.5.92","192.168.5.93"],"port":80,"protocol":"HTTP","serviceName":"22012-job-queue-manager:backend","ingressName":"22012-job-queue-manager:backend-ingress","hostname":"webcatmaxxers.discovery.cs.vt.edu","path":"/api","allNodes":false},{"addresses":["192.168.5.91","192.168.5.92","192.168.5.93"],"port":80,"protocol":"HTTP","serviceName":"22012-job-queue-manager:backend","ingressName":"22012-job-queue-manager:backend-ingress","hostname":"webcatmaxxers.discovery.cs.vt.edu","path":"/","allNodes":false}]'
+      kubectl.kubernetes.io/last-applied-configuration: |
+        {"apiVersion":"networking.k8s.io/v1","kind":"Ingress","metadata":{"annotations":{"nginx.ingress.kubernetes.io/whitelist-source-range":"0.0.0.0/0,::/0"},"name":"backend-ingress","namespace":"22012-job-queue-manager"},"spec":{"rules":[{"host":"webcatmaxxers.discovery.cs.vt.edu","http":{"paths":[{"backend":{"service":{"name":"backend","port":{"number":3333}}},"path":"/api","pathType":"Prefix"},{"backend":{"service":{"name":"backend","port":{"number":3333}}},"path":"/","pathType":"Exact"}]}}]}}
+      nginx.ingress.kubernetes.io/whitelist-source-range: 0.0.0.0/0,::/0
+    creationTimestamp: "2026-04-11T19:11:40Z"
+    generation: 1
+    name: backend-ingress
+    namespace: 22012-job-queue-manager
+    resourceVersion: "501537945"
+    uid: a90decda-f4c8-4228-8776-4c98b233985a
+  spec:
+    rules:
+    - host: webcatmaxxers.discovery.cs.vt.edu
+      http:
+        paths:
+        - backend:
+            service:
+              name: backend
+              port:
+                number: 3333
+          path: /api
+          pathType: Prefix
+        - backend:
+            service:
+              name: backend
+              port:
+                number: 3333
+          path: /
+          pathType: Exact
+  status:
+    loadBalancer:
+      ingress:
+      - ip: 192.168.5.91
+      - ip: 192.168.5.92
+      - ip: 192.168.5.93
+kind: List
+metadata:
+  resourceVersion: ""
