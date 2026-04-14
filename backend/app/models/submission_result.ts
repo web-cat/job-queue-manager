@@ -25,8 +25,12 @@ export default class SubmissionResult extends BaseModel {
   static table = 'submission_result'
 
   // Note: primary key is correctness_score per the schema
+
   @column({ isPrimary: true })
-  declare correctnessScore: number
+  declare id: number
+
+  @column()
+  declare correctnessScore: number | null
 
   @column()
   declare toolScore: number | null
