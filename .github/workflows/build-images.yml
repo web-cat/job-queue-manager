@@ -104,7 +104,7 @@ jobs:
       - name: build and push frontend
         uses: docker/build-push-action@v6
         with:
-          context: ./frontend
+          context: . # ← change from ./frontend to . (repo root)
           file: ./frontend/Dockerfile
           push: true
           provenance: false
