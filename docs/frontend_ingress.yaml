@@ -1,0 +1,49 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: backend-ingress
+  namespace: 22012-job-queue-manager
+  annotations:
+    nginx.ingress.kubernetes.io/whitelist-source-range: "0.0.0.0/0,::/0"
+spec:
+  rules:
+    - host: webcatmaxxers.discovery.cs.vt.edu
+      http:
+        paths:
+          # API routes → backend
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 3333
+          # Health check → backend
+          - path: /
+            pathType: Exact
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 3333
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: frontend-ingress
+  namespace: 22012-job-queue-manager
+  annotations:
+    nginx.ingress.kubernetes.io/whitelist-source-range: "0.0.0.0/0,::/0"
+spec:
+  rules:
+    - host: webcatmaxxers.discovery.cs.vt.edu
+      http:
+        paths:
+          # All other routes → frontend
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 3000
