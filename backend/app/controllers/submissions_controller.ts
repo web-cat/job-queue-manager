@@ -24,6 +24,7 @@ import vine from '@vinejs/vine'
 import Submission from '#models/submission'
 import SubmissionResult from '#models/submission_result'
 import JobQueueService from '#services/job_queue_service'
+import { uploadFileToObjectStorage } from '#services/object_storage_service'
 
 // ── Validators ───────────────────────────────────────────────────────
 
@@ -88,8 +89,25 @@ export default class SubmissionsController {
     const user = auth.getUserOrFail()
     const data = await request.validateUsing(createSubmissionValidator)
 
-    // TODO: Handle file upload once storage strategy is confirmed
-    // const file = request.file('submission_zip', { size: '10mb', extnames: ['zip'] })
+    const submissionArchive = request.file('submission_zip', {
+      size: '100mb',
+      extnames: ['zip'],
+    })
+    
+    if (!submissionArchive) {
+      return response.badRequest({
+        message: 'submission_zip is required',
+      })
+    }
+
+    if (!submissionArchive.isValid) {
+      return response.badRequest({
+        message: 'Invalid submission zip',
+        errors: submissionArchive.errors,
+      })
+    }
+    
+
 
     // Create a stub submission_result (required by FK constraint)
     const submissionResult = await SubmissionResult.create({
@@ -108,6 +126,30 @@ export default class SubmissionsController {
       submitTime: DateTime.now(),
     })
 
+    const objectKey = `submissions/${submission.id}/input/${submissionArchive.clientName}`
+
+    try {
+    if (!submissionArchive.tmpPath) {
+      return response.internalServerError({
+        message: 'Uploaded file was not written to temp storage',
+      })
+    }
+
+    await uploadFileToObjectStorage(
+      process.env.S3_BUCKET!,
+      objectKey,
+      submissionArchive.tmpPath,
+      submissionArchive.type || 'application/zip'
+    )
+    } catch (error) {
+      await submission.delete()
+      await submissionResult.delete()
+
+      return response.internalServerError({
+        message: 'Failed to upload submission archive',
+        error: error instanceof Error ? error.message : 'Unknown upload error',
+      })
+    }
     // Create local enqueued_job record
     const enqueuedJob = await this.jobQueueService.createLocalRecord(submission)
 
@@ -117,7 +159,7 @@ export default class SubmissionsController {
     //   return response.serviceUnavailable({ message: 'Job queue unavailable' })
     // }
 
-    return response.created({ submission, enqueuedJob })
+    return response.created({ submission, enqueuedJob, archivePath: objectKey })
   }
 
   /**
