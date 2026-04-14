@@ -26,5 +26,8 @@
       "yaml": ">=2.8.3",
       "file-type": ">=21.3.2"
     }
+  },
+  "dependencies": {
+    "@adonisjs/drive": "^4.0.0"
   }
 }
