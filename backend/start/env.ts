@@ -56,4 +56,27 @@ export default await Env.create(new URL('../', import.meta.url), {
   */
   JOB_QUEUE_API_URL: Env.schema.string.optional(),
   JOB_QUEUE_API_KEY: Env.schema.string.optional(),
+
+  /*
+  |----------------------------------------------------------
+  | Variables for MinIO / S3-compatible object storage
+  |
+  | MinIO is deployed as a Kubernetes service in the cluster.
+  | The AWS SDK is used directly since @adonisjs/drive requires v7.
+  | forcePathStyle must be true for MinIO — it does not support
+  | virtual-hosted style bucket URLs.
+  |
+  | AWS_ACCESS_KEY_ID     → MinIO root user (minioadmin)
+  | AWS_SECRET_ACCESS_KEY → MinIO root password (from minio-secret)
+  | AWS_REGION            → set to us-east-1 (required by SDK, not used by MinIO)
+  | S3_BUCKET             → bucket name (data)
+  | S3_ENDPOINT           → cluster: http://minio.22012-job-queue-manager.svc.cluster.local:9000
+  |                         local dev: http://127.0.0.1:9000 (requires kubectl port-forward)
+  |----------------------------------------------------------
+  */
+  S3_BUCKET: Env.schema.string(),
+  S3_ENDPOINT: Env.schema.string(),
+  AWS_ACCESS_KEY_ID: Env.schema.string(),
+  AWS_SECRET_ACCESS_KEY: Env.schema.string(),
+  AWS_REGION: Env.schema.string.optional(),
 })
