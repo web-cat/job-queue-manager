@@ -64,14 +64,11 @@ export default class AuthController {
       return response.conflict({ message: 'A user with this email already exists' })
     }
 
-    const hashedPassword = await hash.use('scrypt').make(data.password)
-    console.log('Hashed password:', hashedPassword) // confirm it's actually hashing
-
     const user = await User.create({
       firstName: data.firstName,
       lastName: data.lastName,
       email: data.email,
-      encryptedPassword: hashedPassword,
+      encryptedPassword: data.password,
       globalRoleId: 3,
       signInCount: 0,
       slug: data.email.split('@')[0],
@@ -121,6 +118,7 @@ export default class AuthController {
       firstName: user.firstName,
       lastName: user.lastName,
       signInCount: user.signInCount,
+      globalRoleId: user.globalRoleId,
     })
   }
 

@@ -13,20 +13,32 @@ const isAuthPage = computed(
     route.path.startsWith("/lti/"),
 );
 
-const navLinks = [
-  { label: "Dashboard", to: "/dashboard", icon: "i-heroicons-home" },
-  {
-    label: "Assignments",
-    to: "/assignments",
-    icon: "i-heroicons-clipboard-document-list",
-  },
-  {
-    label: "Submissions",
-    to: "/submissions",
-    icon: "i-heroicons-code-bracket",
-  },
-  { label: "Courses", to: "/courses", icon: "i-heroicons-academic-cap" },
-];
+const navLinks = computed(() => {
+  const links = [
+    { label: "Dashboard", to: "/dashboard", icon: "i-heroicons-home" },
+    {
+      label: "Assignments",
+      to: "/assignments",
+      icon: "i-heroicons-clipboard-document-list",
+    },
+    {
+      label: "Submissions",
+      to: "/submissions",
+      icon: "i-heroicons-code-bracket",
+    },
+    { label: "Courses", to: "/courses", icon: "i-heroicons-academic-cap" },
+  ];
+
+  if (authStore.user?.globalRoleId === 1) {
+    links.push({
+      label: "Admin",
+      to: "/admin",
+      icon: "i-heroicons-shield-check",
+    });
+  }
+
+  return links;
+});
 </script>
 
 <template>
