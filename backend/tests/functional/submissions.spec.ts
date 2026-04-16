@@ -165,3 +165,17 @@ test.group('Submissions — store', () => {
     response.assertStatus(400)
   })
 })
+// docker run -d \
+//   -p 9000:9000 \
+//   -p 9001:9001 \
+//   --name minio \
+//   -e MINIO_ROOT_USER=minioadmin \
+//   -e MINIO_ROOT_PASSWORD=webcatmaxxing \
+//   quay.io/minio/minio server /data --console-address ":9001"
+
+// # Create the data bucket
+// docker exec minio mc alias set local http://localhost:9000 minioadmin webcatmaxxing
+// docker exec minio mc mb local/data
+
+// Then set the local .env to point at it:
+// S3_ENDPOINT=http://127.0.0.1:9000
