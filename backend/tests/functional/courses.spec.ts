@@ -1,5 +1,21 @@
 import { test } from '@japa/runner'
 // import { skip } from 'node:test'
+import db from '@adonisjs/lucid/services/db'
+import { DateTime } from 'luxon'
+
+async function createTerm() {
+  const [term] = await db
+    .table('term')
+    .insert({
+      season: 1,
+      year: 2026,
+      slug: `spring-2026-${Date.now()}`,
+      starts_on: DateTime.now().toISO(),
+      ends_on: DateTime.now().plus({ months: 4 }).toISO(),
+    })
+    .returning('id')
+  return term.id
+}
 
 // Helper to register and get a token
 async function loginAsUser(client: any) {
@@ -136,6 +152,7 @@ test.group('Courses — sections', () => {
   // a term seed or factory is added.
   test('creates a section for a course', async ({ client }) => {
     const { token } = await loginAsUser(client)
+    const termId = await createTerm()
 
     const created = await client
       .post('/api/courses')
@@ -153,7 +170,7 @@ test.group('Courses — sections', () => {
       .post(`/api/courses/${courseId}/sections`)
       .header('Authorization', `Bearer ${token}`)
       .json({
-        termId: 1, // requires a seeded term
+        termId, // ← use dynamic term
         label: 'Section 1',
       })
 
