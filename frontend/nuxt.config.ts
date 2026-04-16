@@ -17,7 +17,12 @@ export default defineNuxtConfig({
     },
     plugins: [tailwindcss()],
     server: {
+      hmr: {
+        protocol: "ws",
+        host: "0.0.0.0",
+      },
       watch: {
+        usePolling: true,
         ignored: ["**/node_modules/**", "**/.nuxt/**", "**/.output/**"],
       },
     },
@@ -39,7 +44,7 @@ export default defineNuxtConfig({
   // Runtime config — public vars available in frontend
   runtimeConfig: {
     public: {
-      apiBase: process.env.NUXT_PUBLIC_API_BASE ?? "http://localhost:3333",
+      apiBase: process.env.NUXT_PUBLIC_API_BASE ?? "http://127.0.0.1:3333",
     },
   },
 

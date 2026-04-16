@@ -38,6 +38,9 @@ const LtiController = () => import('#controllers/lti_controller')
 const SubmissionsController = () => import('#controllers/submissions_controller')
 const AssignmentsController = () => import('#controllers/assignments_controller')
 const CoursesController = () => import('#controllers/courses_controller')
+const UsersController = () => import('#controllers/users_controller')
+const TermsController = () => import('#controllers/terms_controller')
+const SubmissionPoliciesController = () => import('#controllers/submission_policies_controller')
 
 // ── Health check ─────────────────────────────────────────────────────
 router.get('/', async () => {
@@ -95,6 +98,17 @@ router
       'unenroll',
     ])
     router.resource('courses', CoursesController).apiOnly()
+
+    // Admin Routes
+    router
+      .group(() => {
+        router.get('/users', [UsersController, 'index'])
+        router.patch('/users/:id/role', [UsersController, 'updateRole'])
+        router.get('/terms', [TermsController, 'index'])
+        router.post('/terms', [TermsController, 'store'])
+        router.get('/submission-policies', [SubmissionPoliciesController, 'index'])
+      })
+      .use(middleware.admin())
   })
   .prefix('/api')
   .use(middleware.auth({ guards: ['api'] }))

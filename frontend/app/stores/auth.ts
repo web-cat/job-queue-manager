@@ -9,6 +9,7 @@ export interface AuthUser {
   firstName: string | null;
   lastName: string | null;
   signInCount: number;
+  globalRoleId: number;
 }
 
 /**
@@ -103,11 +104,12 @@ export const useAuthStore = defineStore(
     // }
     async function login(email: string, password: string): Promise<void> {
       const config = useRuntimeConfig();
-      const data = await $fetch<{ token: { token: string } }>(
+      const data = await $fetch<any>(
         `${config.public.apiBase}/api/auth/login`,
         { method: "POST", body: { email, password } },
       );
-      await setToken(data.token.token); // ← was data.token.value
+      const actualToken = data.token?.token || data.token?.value || data.token;
+      await setToken(actualToken);
     }
 
     /**
