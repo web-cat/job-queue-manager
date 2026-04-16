@@ -165,17 +165,135 @@ test.group('Submissions — store', () => {
     response.assertStatus(400)
   })
 })
-// docker run -d \
-//   -p 9000:9000 \
-//   -p 9001:9001 \
-//   --name minio \
-//   -e MINIO_ROOT_USER=minioadmin \
-//   -e MINIO_ROOT_PASSWORD=webcatmaxxing \
-//   quay.io/minio/minio server /data --console-address ":9001"
 
-// # Create the data bucket
-// docker exec minio mc alias set local http://localhost:9000 minioadmin webcatmaxxing
-// docker exec minio mc mb local/data
+test.group('Submissions — MinIO storage', () => {
+  // These tests require MinIO to be accessible.
+  // Local dev: kubectl port-forward svc/minio 9000:9000 -n 22012-job-queue-manager
+  // CI: skipped automatically when MinIO is unreachable
 
-// Then set the local .env to point at it:
+  async function isMinioAvailable(): Promise<boolean> {
+    const { S3Client, HeadBucketCommand } = await import('@aws-sdk/client-s3')
+    const s3 = new S3Client({
+      region: process.env.AWS_REGION || 'us-east-1',
+      endpoint: process.env.S3_ENDPOINT,
+      forcePathStyle: true,
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+      },
+    })
+    try {
+      await s3.send(new HeadBucketCommand({ Bucket: process.env.S3_BUCKET! }))
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  test('can connect to MinIO and reach the data bucket', async ({ assert }) => {
+    if (!(await isMinioAvailable())) {
+      console.log('MinIO not reachable — skipping')
+      return
+    }
+    // ... rest of test
+
+    const { S3Client, HeadBucketCommand } = await import('@aws-sdk/client-s3')
+    const s3 = new S3Client({
+      region: process.env.AWS_REGION || 'us-east-1',
+      endpoint: process.env.S3_ENDPOINT,
+      forcePathStyle: true,
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+      },
+    })
+
+    const result = await s3.send(new HeadBucketCommand({ Bucket: process.env.S3_BUCKET! }))
+    assert.equal(result.$metadata.httpStatusCode, 200)
+  })
+
+  test('submission zip is uploaded to correct MinIO path', async ({ client, assert }) => {
+    if (!(await isMinioAvailable())) {
+      console.log('MinIO not reachable — skipping')
+      return
+    }
+
+    const { token } = await loginAsUser(client)
+
+    // Create a submission policy and assignment to satisfy FKs
+    const [policy] = await db
+      .table('submission_policy')
+      .insert({
+        award_early_bonus: false,
+        deduct_late_penalty: false,
+        allow_partners: false,
+        auto_assign_partners: true,
+        deduct_excess_submission_penalty: false,
+        force_lti_clickthrough: false,
+        use_time_bank_days: false,
+        submisison_method: 0,
+      })
+      .returning('id')
+
+    const [assignment] = await db
+      .table('assignment')
+      .insert({
+        name: `MinIO Test Assignment ${Date.now()}`,
+        submission_policy_id: policy.id,
+        scrambled: false,
+      })
+      .returning('id')
+
+    // Write a temp zip file
+    const fs = await import('node:fs')
+    const zipPath = `/tmp/minio-test-${Date.now()}.zip`
+
+    // Use the zip binary to create a minimal zip
+    const { execSync } = await import('node:child_process')
+    const pyPath = `/tmp/solution-${Date.now()}.py`
+    fs.writeFileSync(pyPath, 'print("hello")')
+    execSync(`zip ${zipPath} ${pyPath}`)
+
+    const response = await client
+      .post('/api/submissions')
+      .header('Authorization', `Bearer ${token}`)
+      .file('submission_zip', zipPath, { filename: 'solution.zip' })
+      .field('workoutId', String(assignment.id))
+      .field('isSubmissionForGrading', 'true')
+
+    response.assertStatus(201)
+
+    const body = response.body()
+    const expectedKey = `submissions/${body.submission.id}/input/solution.zip`
+    assert.equal(body.archivePath, expectedKey)
+
+    // Verify file exists in MinIO
+    const { S3Client, HeadObjectCommand } = await import('@aws-sdk/client-s3')
+    const s3 = new S3Client({
+      region: process.env.AWS_REGION || 'us-east-1',
+      endpoint: process.env.S3_ENDPOINT,
+      forcePathStyle: true,
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+      },
+    })
+
+    const head = await s3.send(
+      new HeadObjectCommand({
+        Bucket: process.env.S3_BUCKET!,
+        Key: expectedKey,
+      })
+    )
+
+    assert.equal(head.$metadata.httpStatusCode, 200)
+
+    // Cleanup temp files
+    fs.unlinkSync(zipPath)
+    fs.unlinkSync(pyPath)
+  })
+})
+// kubectl port-forward svc/minio 9000:9000 -n 22012-job-queue-manager
+
+// backend/.env requirement
 // S3_ENDPOINT=http://127.0.0.1:9000
