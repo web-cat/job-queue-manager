@@ -43,6 +43,7 @@ import Submission from '#models/submission'
 import SubmissionResult from '#models/submission_result'
 import JobQueueService from '#services/job_queue_service'
 import { uploadFileToObjectStorage } from '#services/object_storage_service'
+import env from '#start/env'
 
 // ── Validators ───────────────────────────────────────────────────────
 
@@ -161,7 +162,7 @@ export default class SubmissionsController {
 
     try {
       await uploadFileToObjectStorage(
-        process.env.S3_BUCKET!,
+        env.get('S3_BUCKET'),
         objectKey,
         submissionArchive.tmpPath,
         submissionArchive.type || 'application/zip'

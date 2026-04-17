@@ -13,18 +13,20 @@ A full-stack job queue management system built for the VT CS department. Student
 | Auth           | VT CAS SSO + LTI 1.1              |
 | Monorepo       | pnpm workspaces                   |
 | Infrastructure | Kubernetes (VT Discovery cluster) |
-| Object Storage | MinIO                             |
+| Object Storage | MinIO (S3-compatible)             |
 
 ## Architecture
 
 Your team owns the full application layer. A separate team owns the Kubernetes execution layer.
 
 ```
-Student submits code
+Student submits code (zip file)
     ↓
 Nuxt Frontend (port 3000)
     ↓
 AdonisJS Backend (port 3333)
+    ↓  upload zip
+MinIO Object Storage (port 9000)
     ↓  POST to their REST API
 Other Team's K8s Backend
     ↓
@@ -42,12 +44,14 @@ job-queue-manager/
 │   └── setup.sh              # First-time setup script
 ├── backend/                  # AdonisJS v6 API
 │   ├── app/
-│   │   ├── controllers/      # auth, cas, lti, submissions, assignments, courses
-│   │   ├── middleware/        # auth, admin
+│   │   ├── controllers/      # auth, cas, lti, submissions, assignments, courses, users, terms
+│   │   ├── middleware/        # auth, admin, log_request
 │   │   ├── models/           # 57 Lucid models (full legacy schema)
-│   │   └── services/         # cas_service, lti_service, job_queue_service
+│   │   └── services/         # cas_service, lti_service, job_queue_service, object_storage_service
 │   ├── database/
 │   │   └── migrations/       # 7 migrations including seed data
+│   ├── tests/
+│   │   └── functional/       # Japa functional tests (auth, assignments, courses, submissions, minio)
 │   ├── start/
 │   │   ├── routes.ts         # all API routes
 │   │   ├── kernel.ts         # middleware registration
@@ -55,7 +59,18 @@ job-queue-manager/
 │   ├── .env.example
 │   └── Dockerfile
 ├── frontend/                 # Nuxt 4 app
-├── docs/                     # ER diagram, schema SQL reference
+│   ├── app/
+│   │   ├── pages/            # login, dashboard, assignments, submissions, courses, admin
+│   │   ├── stores/           # auth store with pinia-plugin-persistedstate
+│   │   ├── middleware/        # auth, guest, index-redirect
+│   │   ├── composables/      # useApi
+│   │   └── layouts/          # default layout with nav
+│   └── Dockerfile
+├── docs/                     # K8s manifests, ingress configs, ER diagram
+├── .github/
+│   └── workflows/
+│       ├── build-images.yml  # CI/CD — builds and pushes Docker images on merge to main
+│       └── run-tests.yml     # CI — runs backend test suite on push to dev and PRs
 ├── DOCUMENTATION.md          # Full file-level documentation
 ├── pnpm-workspace.yaml
 ├── package.json
@@ -119,19 +134,25 @@ This will:
 - Copy `.env.example` to `.env` if it doesn't exist
 - Run a test build to catch any TypeScript errors
 
-### 5. Set your DB password
+### 5. Set your environment variables
 
-The `DB_PASSWORD` is not in `.env.example` for security. Get it from a teammate or pull it from the Kubernetes secret:
+The `DB_PASSWORD` and MinIO credentials are not in `.env.example` for security. Pull them from the Kubernetes secrets:
 
 ```bash
+# Postgres password
 kubectl get secret backend-env -n 22012-job-queue-manager \
   -o jsonpath='{.data.DB_PASSWORD}' | base64 --decode
+
+# MinIO password
+kubectl get secret minio-secret -n 22012-job-queue-manager \
+  -o jsonpath='{.data.MINIO_ROOT_PASSWORD}' | base64 --decode
 ```
 
-Add it to `backend/.env`:
+Add them to `backend/.env`:
 
 ```dotenv
 DB_PASSWORD=<value from above>
+AWS_SECRET_ACCESS_KEY=<minio password from above>
 ```
 
 ---
@@ -140,19 +161,25 @@ DB_PASSWORD=<value from above>
 
 You need multiple terminals open when developing locally.
 
-**Terminal 1 — Postgres tunnel (keep this running the entire session):**
+**Terminal 1 — Postgres tunnel (required for all backend work):**
 
 ```bash
 kubectl port-forward svc/postgres 5432:5432 -n 22012-job-queue-manager
 ```
 
-**Terminal 2 — AdonisJS backend:**
+**Terminal 2 — MinIO tunnel (required for submission file uploads):**
+
+```bash
+kubectl port-forward svc/minio 9000:9000 -n 22012-job-queue-manager
+```
+
+**Terminal 3 — AdonisJS backend:**
 
 ```bash
 cd backend && node ace serve --watch --poll
 ```
 
-**Terminal 3 — Nuxt frontend:**
+**Terminal 4 — Nuxt frontend:**
 
 ```bash
 cd frontend && pnpm dev
@@ -162,10 +189,66 @@ cd frontend && pnpm dev
 | ---------------- | --------------------- | ------------------------------------------------------ |
 | Nuxt frontend    | http://localhost:3000 | https://webcatmaxxers.discovery.cs.vt.edu              |
 | AdonisJS backend | http://localhost:3333 | https://webcatmaxxers.discovery.cs.vt.edu/api          |
+| MinIO API        | http://localhost:9000 | internal cluster only                                  |
 | Adminer (DB UI)  | —                     | https://webcatmaxxers.discovery.cs.vt.edu/db           |
 | CAS login        | ❌ cluster only       | https://webcatmaxxers.discovery.cs.vt.edu/api/auth/cas |
 
-> **CAS authentication only works on the Discovery cluster.** It will not redirect correctly on localhost. Test auth by deploying to the cluster.
+> **CAS authentication only works on the Discovery cluster.** It will not redirect correctly on localhost.
+
+> **MinIO port-forward is required to test submission file uploads locally.** Without it, POST /api/submissions will fail with a bucket connection error. Make sure `S3_ENDPOINT=http://127.0.0.1:9000` is set in `backend/.env`.
+
+---
+
+## Object Storage (MinIO)
+
+Student submission zip files are stored in MinIO, the S3-compatible object storage service running in the cluster. The AWS SDK is used directly (`@aws-sdk/client-s3`) since `@adonisjs/drive` requires AdonisJS v7.
+
+**File path format:** `submissions/{submissionId}/input/{originalFilename}`
+
+**Required env vars for local dev:**
+
+```dotenv
+AWS_ACCESS_KEY_ID=minioadmin
+AWS_SECRET_ACCESS_KEY=<from minio-secret>
+AWS_REGION=us-east-1
+S3_BUCKET=data
+S3_ENDPOINT=http://127.0.0.1:9000
+```
+
+**Check bucket contents:**
+
+```bash
+kubectl exec -it deployment/minio -n 22012-job-queue-manager -- sh -c \
+  "mc alias set local http://localhost:9000 minioadmin webcatmaxxing && mc ls local/data --recursive"
+```
+
+**Create the data bucket if it doesn't exist:**
+
+```bash
+kubectl exec -it deployment/minio -n 22012-job-queue-manager -- sh -c \
+  "mc alias set local http://localhost:9000 minioadmin webcatmaxxing && mc mb local/data"
+```
+
+> **Important:** Verify that the MinIO deployment has a PersistentVolumeClaim. Without persistent storage, uploaded files will be lost if the pod restarts:
+>
+> ```bash
+> kubectl get pvc -n 22012-job-queue-manager
+> ```
+
+---
+
+## Running Tests
+
+Tests use Japa and run against the local backend. Requires Postgres port-forward to be active.
+
+```bash
+cd backend && node ace test                                           # run all tests
+cd backend && node ace test --files tests/functional/auth.spec.ts   # run specific file
+```
+
+**MinIO tests** in `submissions.spec.ts` auto-skip when MinIO is not reachable. To run them locally, start the MinIO port-forward first (Terminal 2 above).
+
+Tests also run automatically in CI on every push to `dev` and every PR targeting `dev` or `main` via `.github/workflows/run-tests.yml`.
 
 ---
 
@@ -240,17 +323,22 @@ Launch URL: `https://webcatmaxxers.discovery.cs.vt.edu/api/lti/launch`
 
 All protected routes require `Authorization: Bearer <token>` header.
 
-| Method   | Route                         | Auth   | Description             |
-| -------- | ----------------------------- | ------ | ----------------------- |
-| GET      | `/api/auth/cas`               | Public | CAS login redirect      |
-| POST     | `/api/auth/login`             | Public | Local login             |
-| POST     | `/api/lti/launch`             | Public | LTI launch from Canvas  |
-| POST     | `/api/submissions/webhook`    | Public | Results from other team |
-| GET      | `/api/auth/me`                | Token  | Current user            |
-| GET/POST | `/api/submissions`            | Token  | List/create submissions |
-| GET      | `/api/submissions/:id/result` | Token  | Grading result          |
-| GET/POST | `/api/assignments`            | Token  | List/create assignments |
-| GET/POST | `/api/courses`                | Token  | List/create courses     |
+| Method   | Route                         | Auth   | Description              |
+| -------- | ----------------------------- | ------ | ------------------------ |
+| GET      | `/api/auth/cas`               | Public | CAS login redirect       |
+| POST     | `/api/auth/login`             | Public | Local login              |
+| POST     | `/api/auth/register`          | Public | Register local account   |
+| POST     | `/api/lti/launch`             | Public | LTI launch from Canvas   |
+| POST     | `/api/submissions/webhook`    | Public | Results from other team  |
+| GET      | `/api/auth/me`                | Token  | Current user             |
+| GET/POST | `/api/submissions`            | Token  | List/create submissions  |
+| GET      | `/api/submissions/:id/result` | Token  | Grading result           |
+| GET/POST | `/api/assignments`            | Token  | List/create assignments  |
+| GET/POST | `/api/courses`                | Token  | List/create courses      |
+| GET      | `/api/users`                  | Admin  | List all users           |
+| PATCH    | `/api/users/:id/role`         | Admin  | Update user role         |
+| GET/POST | `/api/terms`                  | Admin  | List/create terms        |
+| GET      | `/api/submission-policies`    | Admin  | List submission policies |
 
 ---
 
@@ -261,23 +349,34 @@ The CI/CD pipeline deploys automatically on merge to `main`.
 **Workflow:**
 
 1. Merge feature branch → `dev` → `main` (via PR)
-2. GitHub Actions builds and pushes Docker image to `container.cs.vt.edu`
-3. Restart backend pod to pull new image:
+2. GitHub Actions runs tests — merge blocked if tests fail
+3. GitHub Actions builds and pushes Docker images to `container.cs.vt.edu`
+4. Restart pods to pull new images:
    ```bash
    kubectl rollout restart deployment/backend -n 22012-job-queue-manager
+   kubectl rollout restart deployment/frontend -n 22012-job-queue-manager
    ```
-4. Run migrations if schema changed:
+5. Run migrations if schema changed:
    ```bash
    kubectl exec -it deployment/backend -n 22012-job-queue-manager -- node ace migration:run
    ```
 
+**Force a redeploy without code changes:**
+
+```bash
+git commit --allow-empty -m "chore: trigger redeploy"
+git push origin main
+```
+
 **Cluster resources:**
 
-| Resource      | Details                                                                      |
-| ------------- | ---------------------------------------------------------------------------- |
-| Namespace     | `22012-job-queue-manager`                                                    |
-| Backend image | `container.cs.vt.edu/timwilson/job-queue-manager-images/backend:prod_latest` |
-| Cluster UI    | https://cloud.cs.vt.edu                                                      |
+| Resource       | Details                                                                       |
+| -------------- | ----------------------------------------------------------------------------- |
+| Namespace      | `22012-job-queue-manager`                                                     |
+| Backend image  | `container.cs.vt.edu/timwilson/job-queue-manager-images/backend:prod_latest`  |
+| Frontend image | `container.cs.vt.edu/timwilson/job-queue-manager-images/frontend:prod_latest` |
+| Cluster UI     | https://cloud.cs.vt.edu                                                       |
+| Live URL       | https://webcatmaxxers.discovery.cs.vt.edu                                     |
 
 ---
 
@@ -303,8 +402,14 @@ pnpm typecheck          # typecheck all workspaces
 # View backend logs
 kubectl logs deployment/backend -n 22012-job-queue-manager --follow
 
+# View frontend logs
+kubectl logs deployment/frontend -n 22012-job-queue-manager --follow
+
 # Open Postgres tunnel
 kubectl port-forward svc/postgres 5432:5432 -n 22012-job-queue-manager
+
+# Open MinIO tunnel (required for local submission testing)
+kubectl port-forward svc/minio 9000:9000 -n 22012-job-queue-manager
 
 # Run migrations on cluster
 kubectl exec -it deployment/backend -n 22012-job-queue-manager -- node ace migration:run
@@ -314,6 +419,13 @@ kubectl exec -it deployment/backend -n 22012-job-queue-manager -- node ace repl
 
 # Restart backend after image update
 kubectl rollout restart deployment/backend -n 22012-job-queue-manager
+
+# Restart frontend after image update
+kubectl rollout restart deployment/frontend -n 22012-job-queue-manager
+
+# Check MinIO bucket contents
+kubectl exec -it deployment/minio -n 22012-job-queue-manager -- sh -c \
+  "mc alias set local http://localhost:9000 minioadmin webcatmaxxing && mc ls local/data --recursive"
 
 # Update a secret value
 kubectl patch secret backend-env -n 22012-job-queue-manager \
@@ -339,13 +451,17 @@ kubectl patch secret backend-env -n 22012-job-queue-manager \
 
 ## Open Items / Blocked
 
-| Item                         | Status     | Notes                                              |
-| ---------------------------- | ---------- | -------------------------------------------------- |
-| LTI consumer key/secret      | ⚠️ Blocked | Ask professor to register tool in Canvas           |
-| Other team REST API contract | ⚠️ Blocked | Need endpoint URL, payload format, result callback |
-| Frontend deployment          | 🔲 Pending | Dockerfile + CI step needed                        |
-| MinIO file upload            | 🔲 Pending | Hook into submissions_controller.ts                |
-| Grade passback OAuth signing | 🔲 Pending | Need oauth-signature package integration           |
+| Item                         | Status      | Notes                                                     |
+| ---------------------------- | ----------- | --------------------------------------------------------- |
+| LTI consumer key/secret      | ⚠️ Blocked  | Ask professor to register tool in Canvas                  |
+| Other team REST API contract | ⚠️ Blocked  | Need endpoint URL, payload format, result callback        |
+| Grade passback OAuth signing | 🔲 Pending  | Need oauth-signature package integration                  |
+| MinIO PVC verification       | 🔲 Pending  | Confirm persistent storage so files survive pod restarts  |
+| Webhook result handler       | 🔲 Pending  | Implement once partner team confirms payload format       |
+| Admin UI page                | ✅ Complete | Built — available at /admin for globalRoleId=1 users      |
+| Frontend deployment          | ✅ Complete | Live at webcatmaxxers.discovery.cs.vt.edu                 |
+| MinIO file upload            | ✅ Complete | Verified working — files stored at submissions/{id}/input |
+| Automated test CI            | ✅ Complete | Runs on push to dev and PRs via run-tests.yml             |
 
 ---
 
@@ -368,6 +484,38 @@ kubectl port-forward svc/postgres 5433:5432 -n 22012-job-queue-manager
 ```
 
 Then update `DB_PORT=5433` in `backend/.env`.
+
+**Port 9000 already in use**
+→ Change the MinIO port-forward and update your `.env`:
+
+```bash
+kubectl port-forward svc/minio 9001:9000 -n 22012-job-queue-manager
+```
+
+Then update `S3_ENDPOINT=http://127.0.0.1:9001` in `backend/.env`.
+
+**Submission upload fails with "No value provided for input HTTP label: Bucket"**
+→ `S3_BUCKET` is not set in `backend/.env`. Add:
+
+```dotenv
+S3_BUCKET=data
+S3_ENDPOINT=http://127.0.0.1:9000
+```
+
+**Submission upload fails with "The specified bucket does not exist"**
+→ The MinIO `data` bucket hasn't been created yet. Create it:
+
+```bash
+kubectl exec -it deployment/minio -n 22012-job-queue-manager -- sh -c \
+  "mc alias set local http://localhost:9000 minioadmin webcatmaxxing && mc mb local/data"
+```
+
+**Submission upload fails with connection error**
+→ The MinIO port-forward is not running. Start it in a separate terminal:
+
+```bash
+kubectl port-forward svc/minio 9000:9000 -n 22012-job-queue-manager
+```
 
 **CAS login not redirecting**
 → CAS only works on the cluster. Deploy first, then test at `webcatmaxxers.discovery.cs.vt.edu/api/auth/cas`.
