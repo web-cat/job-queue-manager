@@ -41,6 +41,8 @@ import type { HttpContext } from '@adonisjs/core/http'
 import vine from '@vinejs/vine'
 import Submission from '#models/submission'
 import SubmissionResult from '#models/submission_result'
+import Assignment from '#models/assignment'
+import AssignmentOffering from '#models/assignment_offering'
 import JobQueueService from '#services/job_queue_service'
 import { uploadFileToObjectStorage } from '#services/object_storage_service'
 
@@ -93,7 +95,6 @@ export default class SubmissionsController {
       .where('id', params.id)
       .where('user_id', user.id)
       .preload('assignmentOffering', (q) => q.preload('assignment'))
-      .preload('enqueuedJob')
       .firstOrFail()
 
     return response.ok(submission)
@@ -147,6 +148,7 @@ export default class SubmissionsController {
     const submission = await Submission.create({
       userId: user.id,
       workoutId: data.workoutId,
+      status: 'UPLOADING',
       assignmentOfferingId: data.assignmentOfferingId ?? null,
       submissionResultId: submissionResult.id,
       isSubmissionForGrading: data.isSubmissionForGrading ?? true,
@@ -180,19 +182,44 @@ export default class SubmissionsController {
     // ── Step 5: Update submission with final file path ────────────
     await submission.merge({ filePath: objectKey }).save()
 
-    // ── Step 6: Create local enqueued_job record ──────────────────
-    const enqueuedJob = await this.jobQueueService.createLocalRecord(submission)
+    // ── Step 6: Enqueue with other team ───────────────────────────
+    // Build the full S3 URI from the bucket and key
+    const assignment = await Assignment.findOrFail(data.workoutId)
 
-    // ── Step 7: Enqueue with other team (stubbed) ─────────────────
-    // TODO: Uncomment once other team confirms their endpoint URL and payload format
-    // const { externalJobId, success } = await this.jobQueueService.enqueue(submission)
-    // if (!success) {
-    //   return response.serviceUnavailable({ message: 'Job queue unavailable' })
-    // }
+    let timeoutSeconds = 120 // safe default
+    if (data.assignmentOfferingId) {
+      // Assuming you import AssignmentOffering at the top of the file
+      const offering = await AssignmentOffering.findOrFail(data.assignmentOfferingId)
+      if (offering.timeLimit) {
+        timeoutSeconds = offering.timeLimit
+      }
+    }
+
+    // Determine the image tag (use a fallback just in case the professor left it blank)
+    const imageTag = assignment.dockerImageTag || 'vt-cs/default-grader:latest'
+
+    const fullStorageUri = `s3://${process.env.S3_BUCKET}/${objectKey}`
+
+    const { success } = await this.jobQueueService.enqueue(
+      submission.id,
+      fullStorageUri,
+      imageTag,
+      timeoutSeconds,
+      2 // Standard priority
+    )
+
+    if (!success) {
+      await submission.merge({ status: 'FAILED_TO_QUEUE' }).save()
+      return response.serviceUnavailable({
+        message: 'The grading cluster is currently unavailable.',
+      })
+    }
+
+    // ── Step 7: Update to Pending ─────────────────────────────────
+    await submission.merge({ status: 'PENDING' }).save()
 
     return response.created({
       submission,
-      enqueuedJob,
       archivePath: objectKey,
     })
   }

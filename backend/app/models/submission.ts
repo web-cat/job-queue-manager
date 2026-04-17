@@ -40,6 +40,9 @@ export default class Submission extends BaseModel {
   declare workoutId: number
 
   @column()
+  declare status: string | null
+
+  @column()
   declare assignmentOfferingId: number | null
 
   @column()
@@ -104,7 +107,4 @@ export default class Submission extends BaseModel {
 
   @belongsTo(() => AssignmentOffering)
   declare assignmentOffering: BelongsTo<typeof AssignmentOffering>
-
-  @hasOne(() => EnqueuedJob)
-  declare enqueuedJob: HasOne<typeof EnqueuedJob>
 }

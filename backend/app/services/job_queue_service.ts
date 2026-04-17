@@ -27,6 +27,8 @@
 
 import EnqueuedJob from '#models/enqueued_job'
 import Submission from '#models/submission'
+import SubmissionResult from '#models/submission_result'
+import env from '#start/env'
 import { DateTime } from 'luxon'
 
 /**
@@ -42,70 +44,127 @@ import { DateTime } from 'luxon'
  *   4. How do results come back — webhook, polling, or shared DB?
  */
 export default class JobQueueService {
-  // TODO: Add to .env once confirmed
-  // private baseUrl = env.get('JOB_QUEUE_API_URL')
-  // private apiKey = env.get('JOB_QUEUE_API_KEY')
+  private baseUrl = env.get('JOB_QUEUE_API_URL')
 
   /**
    * Submit a job to the other team's REST API.
    * Called after a submission is created.
    */
   async enqueue(
-    submission: Submission,
-    _priority: number = 0
-  ): Promise<{ externalJobId: string | null; success: boolean }> {
-    // TODO: Replace this stub with actual API call once other team confirms endpoint
-    //
-    // const response = await fetch(`${this.baseUrl}/jobs`, {
-    //   method: 'POST',
-    //   headers: {
-    //     'Content-Type': 'application/json',
-    //     'Authorization': `Bearer ${this.apiKey}`,
-    //   },
-    //   body: JSON.stringify({
-    //     submissionId: submission.id,
-    //     priority,
-    //     workerTag: 'python3',   // TODO: derive from assignment/exercise type
-    //     // filePath: submission.filePath,  // TODO: once file storage is decided
-    //   }),
-    // })
-    //
-    // const data = await response.json()
-    // return { externalJobId: data.jobId, success: response.ok }
+    submissionId: number,
+    storageUri: string,
+    imageTag: string,
+    timeoutSeconds: number = 120,
+    priority: number = 2
+  ): Promise<{ success: boolean }> {
+    const payload = {
+      submission_id: submissionId,
+      job_priority: priority,
+      storage_uri: storageUri,
+      environment: {
+        image_tag: imageTag,
+        timeout_seconds: timeoutSeconds,
+      },
+      callback_url: `${env.get('INTERNAL_APP_URL')}/api/submissions/webhook`,
+    }
 
-    console.warn(
-      `[JobQueueService] enqueue() is a stub — submission ${submission.id} not actually sent`
-    )
-    return { externalJobId: null, success: false }
+    try {
+      const response = await fetch(`${this.baseUrl}/api/v1/jobs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        console.error(`[JobQueueService] API rejected job. Status: ${response.status}`)
+        return { success: false }
+      }
+
+      console.warn(
+        `[JobQueueService] enqueue() is a stub — submission ${submissionId} not actually sent`
+      )
+
+      return { success: true }
+    } catch (error) {
+      console.error(`[JobQueueService] Failed to reach execution API:`, error)
+      return { success: false }
+    }
   }
 
   /**
-   * Check the status of a job from the other team's API.
+   * Check the status of a job.
    * Used if results come back via polling rather than webhook.
-   *
-   * TODO: Implement once other team confirms their status endpoint
    */
-  async checkStatus(externalJobId: string): Promise<{ status: string; result: unknown } | null> {
-    // TODO: Replace with actual API call
-    // const response = await fetch(`${this.baseUrl}/jobs/${externalJobId}`, {
-    //   headers: { 'Authorization': `Bearer ${this.apiKey}` },
-    // })
-    // return response.json()
-
-    console.warn(`[JobQueueService] checkStatus() is a stub — job ${externalJobId} not checked`)
-    return null
+  async checkStatus(submissionId: number): Promise<any | null> {
+    console.warn(`[JobQueueService] checkStatus() is a stub — job ${submissionId} not checked`)
+    try {
+      const response = await fetch(`${this.baseUrl}/api/v1/jobs/${submissionId}/results`)
+      if (!response.ok) return null
+      return await response.json()
+    } catch (error) {
+      return null
+    }
   }
 
   /**
    * Handle a webhook callback from the other team when a job completes.
    * Called from a dedicated webhook endpoint in routes.ts.
-   *
-   * TODO: Implement once other team confirms their webhook payload format
    */
-  async handleWebhook(payload: Record<string, unknown>): Promise<void> {
-    // TODO: Parse their webhook payload and update submission_result
-    // const { submissionId, score, feedback, passed } = payload
-    // await SubmissionResult.updateOrCreate(...)
+  async handleWebhook(payload: any): Promise<void> {
+    // Extract the nested data object based on their specific contract
+    const jobData = payload.data
+    if (!jobData || !jobData.submission_id) {
+      console.error('[JobQueueService] Invalid webhook payload received:', payload)
+      return
+    }
+
+    const {
+      submission_id,
+      status, // e.g., "completed"
+      started_at,
+      completed_at,
+      result,
+    } = jobData
+
+    // Update the parent Submission record
+    const submission = await Submission.findOrFail(submission_id)
+
+    // Map their lowercase status to the system's uppercase format
+    await submission
+      .merge({
+        status: status.toUpperCase(),
+      })
+      .save()
+
+    // Defensively handle the raw text logs
+    let safeOutput = null
+    if (result && result.test_output) {
+      // TRUNCATE to 10,000 characters to prevent database crashes from infinite loops
+      safeOutput =
+        result.test_output.length > 10000
+          ? result.test_output.substring(0, 10000) + '\n...[TRUNCATED BY SYSTEM]'
+          : result.test_output
+    }
+
+    // Update the SubmissionResult telemetry and grade
+    const submissionResult = await SubmissionResult.findByOrFail(
+      'submission_result_id',
+      submission.submissionResultId
+    )
+
+    await submissionResult
+      .merge({
+        correctnessScore: result?.correctness_score ?? 0,
+        toolScore: result?.tool_score ?? 0,
+        comments: result?.comments ?? null,
+        testOutput: safeOutput, // Save the truncated text locally since they aren't using URIs
+        startedAt: started_at ? DateTime.fromISO(started_at) : null,
+        completedAt: completed_at ? DateTime.fromISO(completed_at) : null,
+      })
+      .save()
+
     console.warn('[JobQueueService] handleWebhook() is a stub — payload not processed', payload)
   }
 

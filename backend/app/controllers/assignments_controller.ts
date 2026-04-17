@@ -27,6 +27,7 @@ import { DateTime } from 'luxon'
 const createAssignmentValidator = vine.compile(
   vine.object({
     name: vine.string().trim().minLength(1),
+    dockerImageTag: vine.string().optional(),
     description: vine.string().optional(),
     submissionPolicyId: vine.number().positive(),
     isPublic: vine.boolean().optional(),

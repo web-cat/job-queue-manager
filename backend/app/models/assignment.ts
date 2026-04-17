@@ -34,6 +34,9 @@ export default class Assignment extends BaseModel {
   declare name: string
 
   @column()
+  declare dockerImageTag: string | null
+
+  @column()
   declare description: string | null
 
   @column()
