@@ -277,12 +277,6 @@ export default class SubmissionsController {
    * Receives result callbacks from the other team when grading completes.
    * Public route — no auth token required.
    *
-   * TODO: Implement once other team confirms webhook payload format.
-   * Expected payload (unconfirmed):
-   *   { submissionId, score, feedbackReady, testResults: [...] }
-   * On receipt: update submission.score, submission.feedbackReady = true,
-   *   update submission_result.correctnessScore with actual score.
-   *
    * SECURITY: Should be IP restricted to other team's cluster IPs in production.
    */
   async webhook({ request, response }: HttpContext) {

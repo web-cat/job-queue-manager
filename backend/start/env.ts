@@ -29,6 +29,8 @@ export default await Env.create(new URL('../', import.meta.url), {
   DB_PASSWORD: Env.schema.string.optional(),
   DB_DATABASE: Env.schema.string(),
 
+  INTERNAL_APP_URL: Env.schema.string({ format: 'url' }),
+
   /*
   |----------------------------------------------------------
   | Variables for VT CAS authentication
@@ -48,12 +50,11 @@ export default await Env.create(new URL('../', import.meta.url), {
 
   /*
   |----------------------------------------------------------
-  | Variables for job queue integration with other team
+  | Variable for job queue integration with other team
   |
   | Optional — stubbed until other team confirms their API.
-  | Fill these in when the other team provides their endpoint.
+  | Fill this in when the other team provides their endpoint.
   |----------------------------------------------------------
   */
   JOB_QUEUE_API_URL: Env.schema.string.optional(),
-  JOB_QUEUE_API_KEY: Env.schema.string.optional(),
 })

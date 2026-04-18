@@ -25,11 +25,31 @@
 //    no other files need to change when this is implemented.
 //    STATUS: stub [CRITICAL — must be implemented before production deployment]
 
-import EnqueuedJob from '#models/enqueued_job'
 import Submission from '#models/submission'
 import SubmissionResult from '#models/submission_result'
 import env from '#start/env'
 import { DateTime } from 'luxon'
+
+export interface ExternalJobPayload {
+  data: {
+    job_id: number
+    submission_id: number
+    status: string
+    docker_image_tag: string
+    priority: number
+    submitted_at: string
+    started_at: string | null
+    completed_at: string | null
+    result?: {
+      correctness_score: number
+      tool_score: number
+      comments: string
+      test_output: string
+      exit_code: number
+      runtime_ms: number
+    }
+  }
+}
 
 /**
  * JobQueueService
@@ -59,12 +79,10 @@ export default class JobQueueService {
   ): Promise<{ success: boolean }> {
     const payload = {
       submission_id: submissionId,
-      job_priority: priority,
+      priority: priority,
       storage_uri: storageUri,
-      environment: {
-        image_tag: imageTag,
-        timeout_seconds: timeoutSeconds,
-      },
+      image_tag: imageTag,
+      timeout_seconds: timeoutSeconds,
       callback_url: `${env.get('INTERNAL_APP_URL')}/api/submissions/webhook`,
     }
 
@@ -113,72 +131,39 @@ export default class JobQueueService {
    * Called from a dedicated webhook endpoint in routes.ts.
    */
   async handleWebhook(payload: any): Promise<void> {
-    // Extract the nested data object based on their specific contract
-    const jobData = payload.data
-    if (!jobData || !jobData.submission_id) {
-      console.error('[JobQueueService] Invalid webhook payload received:', payload)
-      return
-    }
-
     const {
-      submission_id,
-      status, // e.g., "completed"
-      started_at,
-      completed_at,
+      submission_id: submissionId,
+      status,
+      submitted_at: queuedAt,
+      started_at: startedAt,
+      completed_at: completedAt,
       result,
-    } = jobData
+    } = payload.data
 
-    // Update the parent Submission record
-    const submission = await Submission.findOrFail(submission_id)
+    // Find and update the parent submission
+    const submission = await Submission.findOrFail(submissionId)
+    await submission.merge({ status }).save()
 
-    // Map their lowercase status to the system's uppercase format
-    await submission
-      .merge({
-        status: status.toUpperCase(),
-      })
-      .save()
+    // If the job finished and has a result block, update the results table
+    if (result) {
+      const submissionResult = await SubmissionResult.findByOrFail('submission_id', submissionId)
 
-    // Defensively handle the raw text logs
-    let safeOutput = null
-    if (result && result.test_output) {
-      // TRUNCATE to 10,000 characters to prevent database crashes from infinite loops
-      safeOutput =
-        result.test_output.length > 10000
-          ? result.test_output.substring(0, 10000) + '\n...[TRUNCATED BY SYSTEM]'
-          : result.test_output
+      await submissionResult
+        .merge({
+          correctnessScore: result.correctness_score,
+          toolScore: result.tool_score,
+          comments: result.comments,
+          testOutput: result.test_output,
+          queuedAt: queuedAt ? DateTime.fromISO(queuedAt) : null,
+          startedAt: startedAt ? DateTime.fromISO(startedAt) : null,
+          completedAt: completedAt ? DateTime.fromISO(completedAt) : null,
+        })
+        .save()
+
+      // Update submission to show feedback is ready for the student UI
+      await submission.merge({ feedbackReady: true }).save()
     }
-
-    // Update the SubmissionResult telemetry and grade
-    const submissionResult = await SubmissionResult.findByOrFail(
-      'submission_result_id',
-      submission.submissionResultId
-    )
-
-    await submissionResult
-      .merge({
-        correctnessScore: result?.correctness_score ?? 0,
-        toolScore: result?.tool_score ?? 0,
-        comments: result?.comments ?? null,
-        testOutput: safeOutput, // Save the truncated text locally since they aren't using URIs
-        startedAt: started_at ? DateTime.fromISO(started_at) : null,
-        completedAt: completed_at ? DateTime.fromISO(completed_at) : null,
-      })
-      .save()
 
     console.warn('[JobQueueService] handleWebhook() is a stub — payload not processed', payload)
-  }
-
-  /**
-   * Store a local enqueued_job record for tracking.
-   * The other team manages this table but we create the initial record.
-   */
-  async createLocalRecord(submission: Submission, priority: number = 0): Promise<EnqueuedJob> {
-    return EnqueuedJob.create({
-      submissionId: submission.id,
-      priority,
-      status: 'pending',
-      retryCount: 0,
-      queueTime: DateTime.now(),
-    })
   }
 }
