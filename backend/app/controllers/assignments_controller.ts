@@ -72,7 +72,16 @@ export default class AssignmentsController {
 
     const query = Assignment.query()
       .where((q) => {
-        q.where('user_id', user.id).orWhere('is_public', true)
+        q.where('is_public', true).orWhereHas('assignmentOfferings', (offeringQuery) => {
+          // Only show private assignments if the user is explicitly enrolled in the course section offering it
+          offeringQuery.whereExists((subq) => {
+            subq
+              .select('id')
+              .from('course_enrollment')
+              .whereColumn('course_enrollment.course_offering_id', 'assignment_offering.course_offering_id')
+              .where('course_enrollment.user_id', user.id)
+          })
+        })
       })
       .preload('submissionPolicy')
       .orderBy('created_at', 'desc')

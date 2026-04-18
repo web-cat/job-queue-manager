@@ -1,13 +1,14 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { createReadStream } from 'node:fs'
+import env from '#start/env'
 
 const s3 = new S3Client({
-  region: process.env.AWS_REGION || 'us-east-1',
-  endpoint: process.env.S3_ENDPOINT,
+  region: env.get('AWS_REGION', 'us-east-1'),
+  endpoint: env.get('S3_ENDPOINT'),
   forcePathStyle: true,
   credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+    accessKeyId: env.get('AWS_ACCESS_KEY_ID'),
+    secretAccessKey: env.get('AWS_SECRET_ACCESS_KEY'),
   },
 })
 
