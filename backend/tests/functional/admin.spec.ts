@@ -5,7 +5,7 @@ import db from '@adonisjs/lucid/services/db'
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Register a normal Student user (globalRoleId = 3 by seed)
+// Helper to register and get a token
 async function loginAsUser(client: any) {
   const email = `user_${Date.now()}@test.com`
   await client.post('/api/auth/register').json({
@@ -19,9 +19,7 @@ async function loginAsUser(client: any) {
   return { token: login.body().token.token, email, userId: user.id }
 }
 
-// Register a user then promote them to Admin (globalRoleId = 1) directly in DB.
-// Admin is the only role with canManageAllCourses = true, which is what
-// AdminMiddleware checks.
+// Register a user then promote them to admin directly in DB.
 async function loginAsAdmin(client: any) {
   const email = `admin_${Date.now()}@test.com`
   await client.post('/api/auth/register').json({
