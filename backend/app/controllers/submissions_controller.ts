@@ -149,9 +149,10 @@ export default class SubmissionsController {
     const submission = await Submission.create({
       userId: user.id,
       workoutId: data.workoutId,
-      status: 'UPLOADING',
+      status: 'uploading',
       assignmentOfferingId: data.assignmentOfferingId ?? null,
       submissionResultId: submissionResult.id,
+      retryCount: 0,
       isSubmissionForGrading: data.isSubmissionForGrading ?? true,
       feedbackReady: false,
       partnerLink: false,
@@ -164,7 +165,7 @@ export default class SubmissionsController {
 
     try {
       await uploadFileToObjectStorage(
-        env.get('S3_BUCKET'),
+        env.get('S3_BUCKET')!,
         objectKey,
         submissionArchive.tmpPath,
         submissionArchive.type || 'application/zip'
@@ -217,7 +218,7 @@ export default class SubmissionsController {
     }
 
     // ── Step 7: Update to Pending ─────────────────────────────────
-    await submission.merge({ status: 'PENDING' }).save()
+    await submission.merge({ status: 'pending' }).save()
 
     return response.created({
       submission,

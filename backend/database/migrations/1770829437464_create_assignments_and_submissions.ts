@@ -92,7 +92,6 @@ export default class extends BaseSchema {
     this.schema.createTable('assignment', (table) => {
       table.increments('id')
       table.string('name', 255).notNullable()
-      table.string('docker_image_tag').nullable()
       table.boolean('scrambled').defaultTo(false)
       table.text('description').nullable()
       table.integer('points_multiplier').nullable()
@@ -261,10 +260,6 @@ export default class extends BaseSchema {
       table.double('ta_score').nullable()
       table.text('comments').nullable()
       table.smallint('comment_format').nullable()
-      table.text('test_output').nullable()
-      table.timestamp('queued_at').nullable()
-      table.timestamp('started_at').nullable()
-      table.timestamp('completed_at').nullable()
       table.timestamp('last_updated').nullable()
       table.timestamps(true, true)
     })
@@ -276,7 +271,6 @@ export default class extends BaseSchema {
     this.schema.createTable('submission', (table) => {
       table.increments('id')
       table.integer('workout_id').notNullable().references('id').inTable('assignment')
-      table.integer('status', 255).nullable()
       table.integer('user_id').notNullable().references('id').inTable('user')
       table.string('file_path', 2048).nullable()
       table.double('score').nullable()

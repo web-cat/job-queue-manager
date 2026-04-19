@@ -132,17 +132,19 @@ export default class JobQueueService {
    */
   async handleWebhook(payload: any): Promise<void> {
     const {
+      job_id: jobId,
       submission_id: submissionId,
       status,
       submitted_at: queuedAt,
       started_at: startedAt,
       completed_at: completedAt,
+      retry_count: retryCount,
       result,
     } = payload.data
 
     // Find and update the parent submission
     const submission = await Submission.findOrFail(submissionId)
-    await submission.merge({ status }).save()
+    await submission.merge({ status, externalJobId: jobId, retryCount: retryCount }).save()
 
     // If the job finished and has a result block, update the results table
     if (result) {
@@ -153,6 +155,8 @@ export default class JobQueueService {
           correctnessScore: result.correctness_score,
           toolScore: result.tool_score,
           comments: result.comments,
+          runtimeMs: result.runtime_ms,
+          exitCode: result.exit_code,
           testOutput: result.test_output,
           queuedAt: queuedAt ? DateTime.fromISO(queuedAt) : null,
           startedAt: startedAt ? DateTime.fromISO(startedAt) : null,
