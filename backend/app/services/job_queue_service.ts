@@ -155,6 +155,7 @@ export default class JobQueueService {
           correctnessScore: result.correctness_score,
           toolScore: result.tool_score,
           comments: result.comments,
+          commentFormat: result.commentFormat,
           runtimeMs: result.runtime_ms,
           exitCode: result.exit_code,
           testOutput: result.test_output,
