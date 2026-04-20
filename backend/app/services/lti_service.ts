@@ -1,236 +1,154 @@
-const lti = require('ims-lti')
-import axios from 'axios'
-import LmsInstance from '#models/lms_instance'
-import LtiIdentity from '#models/lti_identity'
-import LisResultId from '#models/lis_result_id'
-import User from '#models/user'
+// PURPOSE: LTI 1.3 Tool Provider integration with Canvas/LMS platforms.
+//
+// DESIGN: This is a documented stub for the next team to implement.
+// LTI 1.3 uses OpenID Connect (OIDC) for authentication rather than
+// OAuth 1.0 HMAC-SHA1 signatures used in LTI 1.1.
+//
+// LTI 1.3 FLOW (3-step OIDC launch):
+//   Step 1 — Initiation:
+//     Canvas POSTs to your login_initiation_url with:
+//       iss, login_hint, target_link_uri, lti_message_hint, client_id
+//     You redirect back to Canvas's auth endpoint with:
+//       scope, response_type, client_id, redirect_uri, state, nonce
+//
+//   Step 2 — Authentication Response:
+//     Canvas POSTs a signed JWT id_token to your redirect_uri
+//     You verify the JWT signature using Canvas's public JWKS keys
+//     You validate: nonce, iss, aud, exp, iat, deployment_id
+//
+//   Step 3 — Access:
+//     Extract user info, roles, and resource context from the verified JWT
+//     Issue your own session token and redirect to the frontend
+//
+// RECOMMENDED IMPLEMENTATION:
+//   Option A — Use ltijs (already installed, v5.9.9)
+//     ltijs runs as its own Express server. Requires ltijs-sequelize package
+//     to use PostgreSQL instead of MongoDB.
+//     npm install ltijs-sequelize
+//     See: https://cvmcosta.github.io/ltijs
+//
+//   Option B — Manual JWT implementation (simpler, no Express conflict)
+//     npm install jwks-rsa jsonwebtoken @types/jsonwebtoken
+//     Fetch Canvas JWKS from: https://canvas.vt.edu/api/lti/security/jwks
+//     Verify id_token JWT, extract claims, provision user.
+//
+// CANVAS TOOL REGISTRATION (LTI 1.3):
+//   Register your tool in Canvas Developer Keys with:
+//     Title: Job Queue Manager
+//     Target Link URI: https://webcatmaxxers.discovery.cs.vt.edu/api/lti/launch
+//     OpenID Connect Initiation URL: https://webcatmaxxers.discovery.cs.vt.edu/api/lti/init
+//     Redirect URIs: https://webcatmaxxers.discovery.cs.vt.edu/api/lti/launch
+//     JWK Method: Public JWK URL → https://webcatmaxxers.discovery.cs.vt.edu/api/lti/jwks
+//     Scopes: Enable grade passback (Assignment and Grade Services)
+//   Canvas will generate a Client ID — store in LTI_CLIENT_ID env var
+//
+// REQUIRED NEW ENV VARS:
+//   LTI_CLIENT_ID        → Client ID from Canvas Developer Keys
+//   LTI_PLATFORM_URL     → https://canvas.vt.edu
+//   LTI_AUTH_ENDPOINT    → https://canvas.vt.edu/api/lti/authorize_redirect
+//   LTI_JWKS_ENDPOINT    → https://canvas.vt.edu/api/lti/security/jwks
+//   LTI_ACCESS_TOKEN_URL → https://canvas.vt.edu/login/oauth2/token
+//   LTI_PRIVATE_KEY      → RSA private key (PEM) for signing JWTs
+//
+// REQUIRED NEW ROUTES (add to routes.ts):
+//   POST /api/lti/init    → OIDC login initiation (public)
+//   POST /api/lti/launch  → OIDC authentication response / id_token receipt (public)
+//   GET  /api/lti/jwks    → Expose your public JWK keyset to Canvas (public)
+//
+// REQUIRED NEW TABLES:
+//   lti_nonce — store used nonces to prevent replay attacks
+//     id, nonce, expires_at, created_at
+//   lti_platform — store registered Canvas platform details
+//     id, platform_url, client_id, auth_endpoint, jwks_endpoint, created_at
+//
+// GRADE PASSBACK (LTI Advantage — Assignment and Grade Services):
+//   LTI 1.3 grade passback uses REST API calls with Bearer tokens
+//   instead of the XML-based LIS Outcomes Service used in LTI 1.1.
+//   The lineitem URL is provided in the JWT claims under:
+//     https://purl.imsglobal.org/spec/lti-ags/claim/endpoint
+//
+// DEPENDENCIES (to install):
+//   ltijs-sequelize (if using ltijs approach)
+//   OR jwks-rsa + jsonwebtoken (if using manual approach)
+//
+// REFERENCES:
+//   LTI 1.3 spec: https://www.imsglobal.org/spec/lti/v1p3/
+//   ltijs docs: https://cvmcosta.github.io/ltijs
+//   Canvas LTI 1.3: https://canvas.instructure.com/doc/api/file.lti_dev_key_config.html
+//   VT Canvas: https://canvas.vt.edu
+//
+// STATUS: stub — awaiting next team implementation
+//   The LTI 1.1 implementation (ims-lti, lti_service.ts) has been
+//   superseded by this 1.3 stub. Do not implement 1.1 further.
 
-/**
- * LtiService
- *
- * Handles LTI 1.1 Tool Provider functionality including:
- *   - Launch validation (OAuth signature verification)
- *   - User provisioning (find or create users from LTI launch data)
- *   - Grade passback (send scores back to LMS via LIS Outcomes Service)
- *
- * LTI 1.1 FLOW:
- *   1. Instructor configures tool in Canvas with consumer key + secret
- *   2. Student clicks assignment link in Canvas
- *   3. Canvas POSTs a signed launch request to POST /api/lti/launch
- *   4. Your app validates the OAuth signature using the shared secret
- *   5. Your app finds or creates the user based on LTI user ID
- *   6. Your app redirects the student to the assignment in your frontend
- *   7. When grading completes, your app POSTs score to lis_outcome_service_url
- *
- * CONSUMER KEY/SECRET:
- *   Stored in the lms_instance table (consumer_key, consumer_secret columns).
- *   Must be obtained from VT Canvas admin or your professor.
- *   Add to the lms_instance table via Adminer before testing.
- *
- * GRADE PASSBACK:
- *   Canvas provides lis_outcome_service_url and lis_result_sourcedid in the
- *   launch POST. Store these in lis_result_id table, then POST scores back
- *   to lis_outcome_service_url using OAuth-signed XML when grading completes.
- *
- * REFERENCE: https://www.middleware.vt.edu/sso/cas.html (LTI section)
- * REFERENCE: https://www.imsglobal.org/specs/ltiv1p1
- */
 export default class LtiService {
   /**
-   * Look up the LMS instance and its consumer secret by consumer key.
-   * Canvas includes oauth_consumer_key in every launch request.
-   * We use this to find the matching lms_instance record with the secret.
-   */
-  async findLmsInstance(consumerKey: string): Promise<LmsInstance | null> {
-    return LmsInstance.findBy('consumer_key', consumerKey)
-  }
-
-  /**
-   * Validate an LTI launch request using OAuth HMAC-SHA1 signature.
-   * Returns the validated ims-lti Provider object on success, null on failure.
+   * Step 1: Handle OIDC login initiation from Canvas.
+   * Canvas POSTs here first with login_hint and target_link_uri.
+   * Respond by redirecting to Canvas's authorization endpoint.
    *
-   * The Provider object gives you convenient accessors like:
-   *   provider.userId       → LTI user ID from Canvas
-   *   provider.username     → user's display name
-   *   provider.student      → true if user is a student
-   *   provider.ta           → true if user is a TA
-   *   provider.instructor   → true if user is an instructor
-   *   provider.body         → all raw LTI parameters
+   * TODO: Implement OIDC initiation redirect
    */
-  async validateLaunch(
-    req: any,
-    consumerKey: string,
-    consumerSecret: string
-  ): Promise<{ valid: boolean; provider: any }> {
-    return new Promise((resolve) => {
-      const provider = new lti.Provider(consumerKey, consumerSecret)
-
-      provider.valid_request(req, (err: Error | null, isValid: boolean) => {
-        if (err || !isValid) {
-          console.error('[LtiService] Launch validation failed:', err?.message)
-          resolve({ valid: false, provider: null })
-        } else {
-          resolve({ valid: true, provider })
-        }
-      })
-    })
-  }
-
-  /**
-   * Find or create a User from LTI launch parameters.
-   * Links the user to their LTI identity for future launches.
-   *
-   * On first launch: creates User + LtiIdentity records
-   * On subsequent launches: loads existing user via LtiIdentity
-   */
-  async findOrCreateUser(provider: any, lmsInstance: LmsInstance): Promise<User> {
-    const ltiUserId = provider.userId as string
-    const email = (provider.body.lis_person_contact_email_primary as string) ?? ''
-    const firstName = (provider.body.lis_person_name_given as string) ?? null
-    const lastName = (provider.body.lis_person_name_family as string) ?? null
-
-    // Check if we already have an LTI identity for this user + LMS
-    let ltiIdentity = await LtiIdentity.query()
-      .where('lti_user_id', ltiUserId)
-      .where('lms_instance_id', lmsInstance.id)
-      .preload('user')
-      .first()
-
-    if (ltiIdentity) {
-      // Existing user — update their info from LTI data
-      const user = ltiIdentity.user
-      await user.merge({ firstName, lastName }).save()
-      return user
-    }
-
-    // New LTI user — find by email or create account
-    const user = await User.firstOrCreate(
-      { email },
-      {
-        email,
-        encryptedPassword: '', // LTI users have no local password
-        firstName,
-        lastName,
-        slug: ltiUserId,
-        signInCount: 0,
-        // TODO: Assign role based on LTI role claim
-        // provider.student → globalRoleId: 2 (Student)
-        // provider.instructor → globalRoleId: 1 (Admin)
-        globalRoleId: provider.student ? 3 : 2, // student=3, instructor=2
-      }
-    )
-
-    // Create LTI identity linking this user to the LMS
-    await LtiIdentity.create({
-      userId: user.id,
-      ltiUserId,
-      lmsInstanceId: lmsInstance.id,
-    })
-
-    return user
-  }
-
-  /**
-   * Store the LIS grade passback credentials for a submission.
-   * Called during LTI launch when lis_outcome_service_url is present.
-   * These credentials are needed later to send grades back to Canvas.
-   */
-  async storeLisCredentials(
-    provider: any,
-    lmsInstance: LmsInstance,
-    userId: number,
-    assignmentOfferingId: number
-  ): Promise<void> {
-    const lisResultSourcedid = provider.body.lis_result_sourcedid as string | undefined
-    const lisOutcomeServiceUrl = provider.body.lis_outcome_service_url as string | undefined
-
-    if (!lisResultSourcedid || !lisOutcomeServiceUrl) {
-      // Grade passback not supported for this launch
-      return
-    }
-
-    // Store or update the LIS credentials
-    await LisResultId.updateOrCreate(
-      {
-        userId,
-        assignmentOfferingId,
-        lmsInstanceId: lmsInstance.id,
-      },
-      {
-        lisResultSourcedid,
-        lisResultSourceDid: lisResultSourcedid,
-      }
+  async handleOidcInitiation(_params: Record<string, string>): Promise<string> {
+    throw new Error(
+      '[LtiService] LTI 1.3 not yet implemented. See service comments for implementation guide.'
     )
   }
 
   /**
-   * Send a grade back to Canvas via LIS Outcomes Service.
-   * Score must be between 0.0 and 1.0 (percentage as decimal).
+   * Step 2: Verify the id_token JWT from Canvas.
+   * Canvas POSTs the signed JWT after the student authenticates.
+   * Verify signature using Canvas JWKS, validate claims, extract user info.
    *
-   * Called after grading completes — requires the lis_result_sourcedid
-   * and lis_outcome_service_url stored during the original launch.
+   * TODO: Implement JWT verification via Canvas JWKS endpoint
+   */
+  async verifyIdToken(_idToken: string): Promise<Record<string, unknown>> {
+    throw new Error(
+      '[LtiService] LTI 1.3 not yet implemented. See service comments for implementation guide.'
+    )
+  }
+
+  /**
+   * Find or create a user from verified LTI 1.3 JWT claims.
+   * Claims include: sub (user ID), email, name, roles, deployment_id
    *
-   * TODO: This requires OAuth signing of the XML payload.
-   * The ims-lti library's OutcomeService handles this automatically
-   * when called from within the valid_request callback (provider.outcome_service).
-   * For async passback (after the original request), you need to re-sign manually.
+   * TODO: Implement user provisioning from 1.3 JWT claims
+   */
+  async findOrCreateUser(_claims: Record<string, unknown>): Promise<never> {
+    throw new Error(
+      '[LtiService] LTI 1.3 not yet implemented. See service comments for implementation guide.'
+    )
+  }
+
+  /**
+   * Send a grade back to Canvas using LTI Advantage Assignment and Grade Services.
+   * This replaces the LTI 1.1 LIS Outcomes XML approach with a REST API call.
+   *
+   * TODO: Implement AGS grade passback
+   * Endpoint is in JWT claims: https://purl.imsglobal.org/spec/lti-ags/claim/endpoint
    */
   async sendGrade(
-    lisOutcomeServiceUrl: string,
-    lisResultSourcedid: string,
-    _consumerKey: string,
-    _consumerSecret: string,
-    score: number
+    _lineitemUrl: string,
+    _userId: string,
+    _score: number,
+    _maxScore: number
   ): Promise<boolean> {
-    // Score must be 0.0 to 1.0
-    const clampedScore = Math.min(1.0, Math.max(0.0, score))
+    throw new Error(
+      '[LtiService] LTI 1.3 grade passback not yet implemented. See service comments.'
+    )
+  }
 
-    // Build the LIS Outcomes XML payload
-    const xmlBody = `<?xml version="1.0" encoding="UTF-8"?>
-<imsx_POXEnvelopeRequest xmlns="http://www.imsglobal.org/services/ltiv1p1/xsd/imsoms_v1p0">
-  <imsx_POXHeader>
-    <imsx_POXRequestHeaderInfo>
-      <imsx_version>V1.0</imsx_version>
-      <imsx_messageIdentifier>${Date.now()}</imsx_messageIdentifier>
-    </imsx_POXRequestHeaderInfo>
-  </imsx_POXHeader>
-  <imsx_POXBody>
-    <replaceResultRequest>
-      <resultRecord>
-        <sourcedGUID>
-          <sourcedId>${lisResultSourcedid}</sourcedId>
-        </sourcedGUID>
-        <result>
-          <resultScore>
-            <language>en</language>
-            <textString>${clampedScore}</textString>
-          </resultScore>
-        </result>
-      </resultRecord>
-    </replaceResultRequest>
-  </imsx_POXBody>
-</imsx_POXEnvelopeRequest>`
-
-    try {
-      // TODO: This POST needs to be OAuth-signed with consumer key/secret
-      // The ims-lti library does not provide a standalone OAuth signer for
-      // async grade passback. You will need to use the 'oauth-signature' npm
-      // package to sign this request manually, or use provider.outcome_service
-      // during the original launch request.
-      //
-      // For now this sends unsigned — will be rejected by Canvas in production.
-      // See: https://github.com/omsmith/ims-lti for OutcomeService usage
-      console.warn('[LtiService] Grade passback is not yet OAuth-signed — will fail in production')
-
-      await axios.post(lisOutcomeServiceUrl, xmlBody, {
-        headers: { 'Content-Type': 'application/xml' },
-        timeout: 10000,
-      })
-
-      return true
-    } catch (error) {
-      console.error('[LtiService] Grade passback failed:', error)
-      return false
+  /**
+   * Return the tool's public JWK keyset for Canvas to verify our JWT signatures.
+   * Canvas fetches this from GET /api/lti/jwks during tool registration.
+   *
+   * TODO: Generate RSA key pair, store private key in LTI_PRIVATE_KEY env var,
+   * expose public key here in JWK format.
+   */
+  getPublicJwks(): Record<string, unknown> {
+    return {
+      keys: [],
+      _note: 'LTI 1.3 JWKS not yet implemented — generate RSA key pair and expose public key here',
     }
   }
 }
