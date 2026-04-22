@@ -1,10 +1,10 @@
 import app from '@adonisjs/core/services/app'
 import JobRecoveryTask from '#services/job_recovery_task'
 
-app.ready(() => {
+app.ready(async () => {
   // Only start the timer if the main web server is running
   if (app.getEnvironment() === 'web') {
-    const recoveryTask = new JobRecoveryTask()
+    const recoveryTask = await app.container.make(JobRecoveryTask)
 
     // Run every 5 minutes (300,000 milliseconds)
     setInterval(

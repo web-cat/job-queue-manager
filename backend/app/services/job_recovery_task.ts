@@ -1,9 +1,15 @@
 import Submission from '#models/submission'
 import JobQueueService from '#services/job_queue_service'
+import SubmissionService from '#services/submission_service'
+import { inject } from '@adonisjs/core'
 import { DateTime } from 'luxon'
 
+@inject()
 export default class JobRecoveryTask {
-  private jobQueueService = new JobQueueService()
+  constructor(
+    private jobQueueService: JobQueueService,
+    private submissionService: SubmissionService
+  ) {}
 
   async run() {
     // Find all jobs that have been pending for more than 10 minutes
@@ -20,7 +26,7 @@ export default class JobRecoveryTask {
       if (payload && payload.data.status === 'completed') {
         // If it's done, feed it directly into our webhook handler
         console.log(`[Recovery] Recovered lost grade for submission ${submission.id}`)
-        await this.jobQueueService.handleWebhook(payload)
+        await this.submissionService.handleWebhook(payload)
       }
     }
   }

@@ -35,17 +35,11 @@
 
 // STATUS: complete [job queue enqueue and webhook handling pending other team API]
 
-import { DateTime } from 'luxon'
 import type { HttpContext } from '@adonisjs/core/http'
+import { inject } from '@adonisjs/core'
 import vine from '@vinejs/vine'
 import Submission from '#models/submission'
-import SubmissionResult from '#models/submission_result'
-import Assignment from '#models/assignment'
-import AssignmentOffering from '#models/assignment_offering'
-import JobQueueService from '#services/job_queue_service'
-import fs from 'node:fs/promises'
-import { uploadFileToObjectStorage } from '#services/object_storage_service'
-import env from '#start/env'
+import SubmissionService from '#services/submission_service'
 
 // ── Validators ───────────────────────────────────────────────────────
 
@@ -59,8 +53,9 @@ const createSubmissionValidator = vine.compile(
 
 // ── Controller ───────────────────────────────────────────────────────
 
+@inject()
 export default class SubmissionsController {
-  private jobQueueService = new JobQueueService()
+  constructor(private submissionService: SubmissionService) {}
 
   /**
    * GET /api/submissions
@@ -115,7 +110,7 @@ export default class SubmissionsController {
     const user = auth.getUserOrFail()
     const data = await request.validateUsing(createSubmissionValidator)
 
-    // ── Step 1: Validate uploaded file ───────────────────────────
+    // Validate uploaded file
     const submissionArchive = request.file('submission_zip', {
       size: '100mb',
       extnames: ['zip'],
@@ -138,93 +133,33 @@ export default class SubmissionsController {
       })
     }
 
-    // ── Step 2: Create submission_result stub (FK required) ───────
-    const submissionResult = await SubmissionResult.create({
-      correctnessScore: 0,
-    })
-
-    // ── Step 3: Create submission record ─────────────────────────
-    // filePath is set to a predictable key format — will be updated
-    // to the final objectKey after we know the submission ID
-    const submission = await Submission.create({
-      userId: user.id,
-      workoutId: data.workoutId,
-      status: 'uploading',
-      assignmentOfferingId: data.assignmentOfferingId ?? null,
-      submissionResultId: submissionResult.id,
-      retryCount: 0,
-      isSubmissionForGrading: data.isSubmissionForGrading ?? true,
-      feedbackReady: false,
-      partnerLink: false,
-      submitTime: DateTime.now(),
-      filePath: null, // set after upload below
-    })
-
-    // ── Step 4: Build object key and upload to MinIO ──────────────
-    const objectKey = `submissions/${submission.id}/input/${submissionArchive.clientName}`
-
-    // Read the file into a memory buffer
-    const fileBuffer = await fs.readFile(submissionArchive.tmpPath!)
-
     try {
-      await uploadFileToObjectStorage(
-        env.get('S3_BUCKET')!,
-        objectKey,
-        fileBuffer,
-        submissionArchive.type || 'application/zip'
+      // Delegate all business logic to the service
+      const { submission, archivePath } = await this.submissionService.processSubmission(
+        user.id,
+        data,
+        submissionArchive
       )
-    } catch (error) {
-      // Clean up DB records if upload fails
-      await submission.delete()
-      await submissionResult.delete()
 
+      return response.created({
+        submission,
+        archivePath,
+      })
+    } catch (error) {
+      // Return the correct matching response error if grading is unavailable or other service errors occur
+      if (
+        error instanceof Error &&
+        error.message === 'The grading cluster is currently unavailable.'
+      ) {
+        return response.serviceUnavailable({
+          message: error.message,
+        })
+      }
       return response.internalServerError({
-        message: 'Failed to upload submission archive',
+        message: 'Failed to process submission',
         error: error instanceof Error ? error.message : 'Unknown upload error',
       })
     }
-
-    // ── Step 5: Update submission with final file path ────────────
-    await submission.merge({ filePath: objectKey }).save()
-
-    // ── Step 6: Enqueue with other team ───────────────────────────
-    // Build the full S3 URI from the bucket and key
-    const assignment = await Assignment.findOrFail(data.workoutId)
-
-    let timeoutSeconds = 120 // safe default
-    if (data.assignmentOfferingId) {
-      // Assuming you import AssignmentOffering at the top of the file
-      const offering = await AssignmentOffering.findOrFail(data.assignmentOfferingId)
-      if (offering.timeLimit) {
-        timeoutSeconds = offering.timeLimit
-      }
-    }
-
-    // Determine the image tag (use a fallback just in case the professor left it blank)
-    const imageTag = assignment.dockerImageTag || 'vt-cs/default-grader:latest'
-
-    const { success } = await this.jobQueueService.enqueue(
-      submission.id,
-      fileBuffer,
-      imageTag,
-      timeoutSeconds,
-      2 // Standard priority
-    )
-
-    if (!success) {
-      await submission.merge({ status: 'failed_to_queue' }).save()
-      return response.serviceUnavailable({
-        message: 'The grading cluster is currently unavailable.',
-      })
-    }
-
-    // ── Step 7: Update to Pending ─────────────────────────────────
-    await submission.merge({ status: 'pending' }).save()
-
-    return response.created({
-      submission,
-      archivePath: objectKey,
-    })
   }
 
   /**
@@ -283,7 +218,7 @@ export default class SubmissionsController {
    */
   async webhook({ request, response }: HttpContext) {
     const payload = request.body()
-    await this.jobQueueService.handleWebhook(payload)
+    await this.submissionService.handleWebhook(payload)
     return response.ok({ received: true })
   }
 }
