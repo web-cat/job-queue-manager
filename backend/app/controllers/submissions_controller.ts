@@ -212,7 +212,7 @@ export default class SubmissionsController {
     )
 
     if (!success) {
-      await submission.merge({ status: 'FAILED_TO_QUEUE' }).save()
+      await submission.merge({ status: 'failed_to_queue' }).save()
       return response.serviceUnavailable({
         message: 'The grading cluster is currently unavailable.',
       })

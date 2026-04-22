@@ -95,6 +95,13 @@ export default class JobQueueService {
         body: formData,
       })
 
+      const responseData = (await response.json()) as { data: { job_id: number } }
+      const jobId = responseData.data.job_id
+
+      // Saves the job id for the submission
+      const submission = await Submission.findOrFail(submissionId)
+      await submission.merge({ externalJobId: jobId }).save()
+
       if (!response.ok) {
         console.error(`[JobQueueService] API rejected job. Status: ${response.status}`)
         return { success: false }
@@ -132,7 +139,6 @@ export default class JobQueueService {
    */
   async handleWebhook(payload: any): Promise<void> {
     const {
-      job_id: jobId,
       submission_id: submissionId,
       status,
       submitted_at: queuedAt,
@@ -144,11 +150,14 @@ export default class JobQueueService {
 
     // Find and update the parent submission
     const submission = await Submission.findOrFail(submissionId)
-    await submission.merge({ status, externalJobId: jobId, retryCount: retryCount }).save()
+    await submission.merge({ status, retryCount: retryCount }).save()
 
     // If the job finished and has a result block, update the results table
     if (result) {
-      const submissionResult = await SubmissionResult.findByOrFail('submission_id', submissionId)
+      const submissionResult = await SubmissionResult.findByOrFail(
+        'id',
+        submission.submissionResultId
+      )
 
       await submissionResult
         .merge({
