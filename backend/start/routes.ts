@@ -66,6 +66,9 @@ router.post('/api/lti/launch', [LtiController, 'launch'])
 // TODO: Add IP restriction middleware once other team confirms their IPs
 router.post('/api/submissions/webhook', [SubmissionsController, 'webhook'])
 
+// ── Public download route (protected by signed URL) ──────────────────
+router.get('/api/submissions/:id/download', [SubmissionsController, 'download']).as('submissions.download')
+
 // ── Protected routes (API token required) ────────────────────────────
 router
   .group(() => {
@@ -81,6 +84,7 @@ router
 
     // Submissions
     router.get('/submissions/:id/result', [SubmissionsController, 'result'])
+    router.get('/submissions/:id/download-url', [SubmissionsController, 'downloadUrl'])
     router.resource('submissions', SubmissionsController).apiOnly()
 
     // Assignments

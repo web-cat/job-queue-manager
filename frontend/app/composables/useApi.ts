@@ -17,10 +17,12 @@ export function useApi() {
 
   const baseURL = config.public.apiBase;
 
-  function getHeaders(): Record<string, string> {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
+  function getHeaders(body?: unknown): Record<string, string> {
+    const headers: Record<string, string> = {};
+    // Do not set Content-Type for FormData; the browser needs to set it with the boundary
+    if (!(body instanceof FormData)) {
+      headers["Content-Type"] = "application/json";
+    }
     if (authStore.token) {
       headers["Authorization"] = `Bearer ${authStore.token}`;
     }
@@ -40,23 +42,23 @@ export function useApi() {
 
   async function post<T>(
     path: string,
-    body?: Record<string, unknown> | unknown[],
+    body?: Record<string, unknown> | unknown[] | FormData,
   ): Promise<T> {
     return $fetch<T>(`${baseURL}/api${path}`, {
       method: "POST",
-      headers: getHeaders(),
-      body: body as Record<string, unknown>,
+      headers: getHeaders(body),
+      body: body as any,
     });
   }
 
   async function patch<T>(
     path: string,
-    body?: Record<string, unknown> | unknown[],
+    body?: Record<string, unknown> | unknown[] | FormData,
   ): Promise<T> {
     return $fetch<T>(`${baseURL}/api${path}`, {
       method: "PATCH",
-      headers: getHeaders(),
-      body: body as Record<string, unknown>,
+      headers: getHeaders(body),
+      body: body as any,
     });
   }
 

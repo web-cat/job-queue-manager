@@ -14,15 +14,76 @@ const submitting = ref(false);
 const submitted = ref(false);
 const submissionId = ref<number | null>(null);
 
-// TODO: Replace with actual file upload once MinIO is integrated
-// For now submitting a placeholder to test the API flow
+const fileInput = ref<HTMLInputElement | null>(null);
+const selectedFile = ref<File | null>(null);
+
+function isValidZip(file: File): boolean {
+  return file.name.toLowerCase().endsWith(".zip") || 
+         file.type === "application/zip" || 
+         file.type === "application/x-zip-compressed";
+}
+
+function handleFileChange(event: Event) {
+  const target = event.target as HTMLInputElement;
+  if (target.files && target.files.length > 0) {
+    const file = target.files[0];
+    if (isValidZip(file)) {
+      selectedFile.value = file;
+    } else {
+      toast.add({ title: "Invalid File", description: "Only .zip files are allowed.", color: "error" });
+      target.value = "";
+    }
+  }
+}
+
+function handleDrop(event: DragEvent) {
+  if (event.dataTransfer?.files && event.dataTransfer.files.length > 0) {
+    const file = event.dataTransfer.files[0];
+    if (isValidZip(file)) {
+      selectedFile.value = file;
+    } else {
+      toast.add({ title: "Invalid File", description: "Only .zip files are allowed.", color: "error" });
+    }
+  }
+}
+
+function triggerFileInput() {
+  fileInput.value?.click();
+}
+
+function clearFile() {
+  selectedFile.value = null;
+  if (fileInput.value) {
+    fileInput.value.value = "";
+  }
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+}
+
 async function handleSubmit() {
+  if (!selectedFile.value) {
+    toast.add({
+      title: "Error",
+      description: "Please select a file to submit.",
+      color: "error"
+    });
+    return;
+  }
+
   submitting.value = true;
   try {
-    const result = await post<any>("/submissions", {
-      workoutId: assignment.value?.id,
-      isSubmissionForGrading: true,
-    });
+    const formData = new FormData();
+    if (assignment.value?.id) {
+      formData.append("workoutId", assignment.value.id.toString());
+    }
+    formData.append("isSubmissionForGrading", "true");
+    formData.append("submission_zip", selectedFile.value);
+
+    const result = await post<any>("/submissions", formData);
     submitted.value = true;
     submissionId.value = result.submission?.id;
     toast.add({
@@ -149,8 +210,12 @@ async function handleSubmit() {
           Upload your solution file to have it automatically graded.
         </p>
 
-        <!-- File upload placeholder -->
+        <!-- File upload -->
         <div
+          v-if="!selectedFile"
+          @click="triggerFileInput"
+          @drop.prevent="handleDrop"
+          @dragover.prevent
           class="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-8 text-center mb-6 hover:border-[#861F41]/50 transition-colors cursor-pointer"
         >
           <UIcon
@@ -161,18 +226,57 @@ async function handleSubmit() {
             Drop your file here or click to browse
           </p>
           <p class="text-xs text-gray-500 font-mono">
-            .zip, .py, .c, .java — max 10MB
-          </p>
-          <p class="text-xs text-amber-600 dark:text-amber-400 mt-2 font-mono">
-            ⚠ File upload coming soon — MinIO integration pending
+            .zip archives only
           </p>
         </div>
+
+        <!-- Selected File Display -->
+        <div
+          v-else
+          class="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 mb-6 flex items-center justify-between"
+        >
+          <div class="flex items-center gap-3 overflow-hidden">
+            <div
+              class="w-10 h-10 rounded-lg bg-[#861F41]/10 flex items-center justify-center flex-shrink-0"
+            >
+              <UIcon
+                name="i-heroicons-document"
+                class="w-5 h-5 text-[#861F41]"
+              />
+            </div>
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-gray-900 dark:text-white truncate">
+                {{ selectedFile.name }}
+              </p>
+              <p class="text-xs text-gray-500 font-mono">
+                {{ formatFileSize(selectedFile.size) }}
+              </p>
+            </div>
+          </div>
+          <UButton
+            variant="ghost"
+            color="gray"
+            icon="i-heroicons-x-mark"
+            size="sm"
+            @click="clearFile"
+            class="flex-shrink-0 ml-2"
+          />
+        </div>
+
+        <input
+          type="file"
+          ref="fileInput"
+          class="hidden"
+          accept=".zip"
+          @change="handleFileChange"
+        />
 
         <UButton
           @click="handleSubmit"
           :loading="submitting"
+          :disabled="!selectedFile"
           size="lg"
-          class="w-full bg-[#861F41] hover:bg-[#6d1835] text-white border-0"
+          class="w-full bg-[#861F41] hover:bg-[#6d1835] text-white border-0 disabled:opacity-50"
           icon="i-heroicons-paper-airplane"
         >
           Submit for Grading

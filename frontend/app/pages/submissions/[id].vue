@@ -3,6 +3,10 @@ definePageMeta({ middleware: "auth" });
 
 const route = useRoute();
 const { get } = useApi();
+const authStore = useAuthStore();
+const config = useRuntimeConfig();
+const toast = useToast();
+const downloading = ref(false);
 
 const {
   data: submission,
@@ -28,7 +32,7 @@ onMounted(() => {
         clearInterval(pollInterval);
         pollInterval = null;
       }
-    }, 5000);
+    }, 15000);
   }
 });
 
@@ -52,6 +56,37 @@ const scoreColor = computed(() => {
   if (result.value.score >= 0.7) return "text-amber-600 dark:text-amber-400";
   return "text-red-600 dark:text-red-400";
 });
+
+async function downloadFile() {
+  if (!submission.value?.id) return;
+  
+  downloading.value = true;
+  try {
+    const response = await fetch(`${config.public.apiBase}/api/submissions/${submission.value.id}/download-url`, {
+      headers: {
+        'Authorization': `Bearer ${authStore.token}`
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error("Failed to secure download link");
+    }
+    
+    const data = await response.json();
+    
+    if (data.url) {
+      // Append the apiBase to the relative signed URL if needed
+      const fullUrl = data.url.startsWith('http') ? data.url : `${config.public.apiBase}${data.url}`;
+      window.location.assign(fullUrl);
+    } else {
+      throw new Error("Invalid response from server");
+    }
+  } catch (e: any) {
+    toast.add({ title: "Download Failed", description: e.message, color: "error" });
+  } finally {
+    downloading.value = false;
+  }
+}
 </script>
 
 <template>
@@ -77,14 +112,29 @@ const scoreColor = computed(() => {
         class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 mb-4"
       >
         <div class="flex items-center justify-between mb-4">
-          <h1 class="text-xl font-bold text-gray-900 dark:text-white">
-            Submission #{{ submission.id }}
-          </h1>
-          <UBadge
-            :label="submission.feedbackReady ? 'Graded' : 'Pending'"
-            :color="submission.feedbackReady ? 'success' : 'warning'"
-            variant="soft"
-          />
+          <div class="flex items-center gap-3">
+            <h1 class="text-xl font-bold text-gray-900 dark:text-white">
+              Submission #{{ submission.id }}
+            </h1>
+            <UBadge
+              :label="submission.feedbackReady ? 'Graded' : 'Pending'"
+              :color="submission.feedbackReady ? 'success' : 'warning'"
+              variant="soft"
+            />
+          </div>
+          
+          <UButton
+            v-if="submission.filePath"
+            icon="i-heroicons-arrow-down-tray"
+            size="sm"
+            color="white"
+            variant="solid"
+            :loading="downloading"
+            @click="downloadFile"
+          >
+            Download Code
+          </UButton>
+          <p v-else class="text-xs text-gray-400 italic">No file available</p>
         </div>
 
         <div class="grid grid-cols-2 gap-4 text-sm">

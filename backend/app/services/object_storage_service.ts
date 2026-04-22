@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
 import { createReadStream } from 'node:fs'
 import env from '#start/env'
 
@@ -26,4 +26,14 @@ export async function uploadFileToObjectStorage(
       ContentType: contentType,
     })
   )
+}
+
+export async function getFileStreamFromObjectStorage(bucket: string, key: string) {
+  const response = await s3.send(
+    new GetObjectCommand({
+      Bucket: bucket,
+      Key: key,
+    })
+  )
+  return response.Body
 }

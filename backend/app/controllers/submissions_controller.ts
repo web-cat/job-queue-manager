@@ -42,8 +42,9 @@ import vine from '@vinejs/vine'
 import Submission from '#models/submission'
 import SubmissionResult from '#models/submission_result'
 import JobQueueService from '#services/job_queue_service'
-import { uploadFileToObjectStorage } from '#services/object_storage_service'
+import { uploadFileToObjectStorage, getFileStreamFromObjectStorage } from '#services/object_storage_service'
 import env from '#start/env'
+import router from '@adonisjs/core/services/router'
 
 // ── Validators ───────────────────────────────────────────────────────
 
@@ -263,5 +264,57 @@ export default class SubmissionsController {
     const payload = request.body()
     await this.jobQueueService.handleWebhook(payload)
     return response.ok({ received: true })
+  }
+
+  /**
+   * GET /api/submissions/:id/download-url
+   * Generates a signed, short-lived URL for downloading the submission.
+   */
+  async downloadUrl({ auth, params, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+
+    const submission = await Submission.query()
+      .where('id', params.id)
+      .where('user_id', user.id)
+      .firstOrFail()
+
+    if (!submission.filePath) {
+      return response.notFound({ message: 'No file associated with this submission' })
+    }
+
+    const url = router
+      .builder()
+      .params({ id: submission.id })
+      .makeSigned('submissions.download', { expiresIn: '5m' })
+
+    return response.ok({ url })
+  }
+
+  /**
+   * GET /api/submissions/:id/download
+   * Public route protected by signed URL. Streams the file securely.
+   */
+  async download({ request, params, response }: HttpContext) {
+    if (!request.hasValidSignature()) {
+      return response.unauthorized({ message: 'Invalid or expired download link' })
+    }
+
+    const submission = await Submission.findOrFail(params.id)
+
+    if (!submission.filePath) {
+      return response.notFound({ message: 'No file associated with this submission' })
+    }
+
+    try {
+      const stream = await getFileStreamFromObjectStorage(env.get('S3_BUCKET'), submission.filePath)
+      const filename = submission.filePath.split('/').pop() || 'submission.zip'
+      
+      response.header('Content-Disposition', `attachment; filename="${filename}"`)
+      response.header('Content-Type', 'application/zip')
+      
+      return response.stream(stream as any)
+    } catch (error) {
+      return response.internalServerError({ message: 'Failed to download file' })
+    }
   }
 }
