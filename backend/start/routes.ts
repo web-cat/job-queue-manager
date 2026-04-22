@@ -42,6 +42,11 @@ const UsersController = () => import('#controllers/users_controller')
 const TermsController = () => import('#controllers/terms_controller')
 const SubmissionPoliciesController = () => import('#controllers/submission_policies_controller')
 
+// ── Global Route Matchers ────────────────────────────────────────────
+router.where('id', router.matchers.number())
+router.where('sectionId', router.matchers.number())
+router.where('userId', router.matchers.number())
+
 // ── Health check ─────────────────────────────────────────────────────
 router.get('/', async () => {
   return { hello: 'world' }
@@ -66,6 +71,9 @@ router.post('/api/lti/launch', [LtiController, 'launch'])
 // TODO: Add IP restriction middleware once other team confirms their IPs
 router.post('/api/submissions/webhook', [SubmissionsController, 'webhook'])
 
+// ── Public download route (protected by signed URL) ──────────────────
+router.get('/api/submissions/:id/download', [SubmissionsController, 'download']).as('submissions.download')
+
 // ── Protected routes (API token required) ────────────────────────────
 router
   .group(() => {
@@ -81,6 +89,7 @@ router
 
     // Submissions
     router.get('/submissions/:id/result', [SubmissionsController, 'result'])
+    router.get('/submissions/:id/download-url', [SubmissionsController, 'downloadUrl'])
     router.resource('submissions', SubmissionsController).apiOnly()
 
     // Assignments
@@ -106,9 +115,11 @@ router
         router.patch('/users/:id/role', [UsersController, 'updateRole'])
         router.get('/terms', [TermsController, 'index'])
         router.post('/terms', [TermsController, 'store'])
-        router.get('/submission-policies', [SubmissionPoliciesController, 'index'])
       })
       .use(middleware.admin())
+
+    // Shared references (instructors and admins)
+    router.get('/submission-policies', [SubmissionPoliciesController, 'index'])
   })
   .prefix('/api')
   .use(middleware.auth({ guards: ['api'] }))
