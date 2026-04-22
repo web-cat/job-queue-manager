@@ -33,6 +33,26 @@ const filtered = computed(() => {
       s.label?.toLowerCase().includes(q)
   );
 });
+
+function getRoleLabel(roleId: number) {
+  switch (roleId) {
+    case 1: return "Instructor";
+    case 2: return "TA";
+    case 3: return "Student";
+    case 4: return "Observer";
+    default: return "Student";
+  }
+}
+
+function getRoleColor(roleId: number) {
+  switch (roleId) {
+    case 1: return "fuchsia";
+    case 2: return "violet";
+    case 3: return "blue";
+    case 4: return "gray";
+    default: return "blue";
+  }
+}
 </script>
 
 <template>
@@ -87,12 +107,21 @@ const filtered = computed(() => {
         class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 hover:border-[#861F41]/50 hover:shadow-md transition-all group"
       >
         <div class="flex items-start justify-between mb-3">
-          <div
-            class="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center"
-          >
-            <UIcon
-              name="i-heroicons-academic-cap"
-              class="w-5 h-5 text-blue-600 dark:text-blue-400"
+          <div class="flex items-center gap-3">
+            <div
+              class="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center"
+            >
+              <UIcon
+                name="i-heroicons-academic-cap"
+                class="w-5 h-5 text-blue-600 dark:text-blue-400"
+              />
+            </div>
+            <UBadge
+              v-if="section.enrollments?.[0]?.courseRoleId"
+              :label="getRoleLabel(section.enrollments[0].courseRoleId)"
+              :color="getRoleColor(section.enrollments[0].courseRoleId)"
+              variant="subtle"
+              size="xs"
             />
           </div>
           <span class="text-xs font-mono text-gray-400">{{

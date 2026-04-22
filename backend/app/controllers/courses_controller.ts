@@ -73,6 +73,8 @@ export default class CoursesController {
       .preload('sections', (sectionsQuery) => {
         sectionsQuery.whereHas('enrollments', (enrollmentsQuery) => {
           enrollmentsQuery.where('user_id', user.id)
+        }).preload('enrollments', (eq) => {
+          eq.where('user_id', user.id).preload('courseRole')
         })
       })
       .orderBy('name', 'asc')
@@ -85,11 +87,18 @@ export default class CoursesController {
    * GET /api/courses/:id
    * Get a single course with its sections
    */
-  async show({ params, response }: HttpContext) {
+  async show({ auth, params, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+
     const course = await Course.query()
       .where('id', params.id)
       .preload('organization')
-      .preload('sections', (q) => q.preload('term'))
+      .preload('sections', (q) => {
+        q.preload('term')
+        q.preload('enrollments', (eq) => {
+          eq.where('user_id', user.id).preload('courseRole')
+        })
+      })
       .firstOrFail()
 
     return response.ok(course)

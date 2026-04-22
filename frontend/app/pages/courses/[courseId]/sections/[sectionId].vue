@@ -2,7 +2,8 @@
 definePageMeta({ middleware: "auth" });
 
 const route = useRoute();
-const { get } = useApi();
+const { get, post } = useApi();
+const toast = useToast();
 
 const courseId = route.params.courseId;
 const sectionId = route.params.sectionId;
@@ -24,6 +25,62 @@ const { data: assignments, pending: pendingAssignments } = await useAsyncData(
 const section = computed(() => {
   return course.value?.sections?.find((s: any) => s.id === Number(sectionId));
 });
+
+const isInstructor = computed(() => {
+  return section.value?.enrollments?.[0]?.courseRoleId === 1;
+});
+
+const { data: policies } = await useAsyncData(
+  "submission-policies",
+  () => get<any[]>("/submission-policies").catch(() => [])
+);
+
+const isSlideoverOpen = ref(false);
+const assignmentState = ref({
+  name: "",
+  description: "",
+  submissionPolicyId: null as number | null,
+  isPublic: true,
+  published: true
+});
+
+async function createAssignment() {
+  if (!assignmentState.value.submissionPolicyId) {
+    toast.add({ title: "Error", description: "Submission policy is required", color: "red" });
+    return;
+  }
+  
+  try {
+    const asm = await post<any>("/assignments", {
+      name: assignmentState.value.name,
+      description: assignmentState.value.description,
+      submissionPolicyId: assignmentState.value.submissionPolicyId,
+      isPublic: assignmentState.value.isPublic
+    });
+    
+    await post(`/assignments/${asm.id}/offerings`, {
+      courseOfferingId: Number(sectionId),
+      published: assignmentState.value.published
+    });
+    
+    toast.add({ title: "Success", description: "Assignment created & offered.", color: "green" });
+    isSlideoverOpen.value = false;
+    
+    // Reset state
+    assignmentState.value = {
+      name: "",
+      description: "",
+      submissionPolicyId: null,
+      isPublic: true,
+      published: true
+    };
+    
+    // Refresh assignments list
+    refreshNuxtData(`section-${sectionId}-assignments`);
+  } catch(e: any) {
+    toast.add({ title: "Error", description: e.message || "Failed to create assignment", color: "red" });
+  }
+}
 
 const search = ref("");
 
@@ -99,12 +156,76 @@ const filtered = computed(() => {
         <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
           Assignments
         </h2>
-        <UInput
-          v-model="search"
-          icon="i-heroicons-magnifying-glass"
-          placeholder="Search assignments…"
-          class="max-w-xs"
-        />
+        <div class="flex items-center gap-4">
+          <UInput
+            v-model="search"
+            icon="i-heroicons-magnifying-glass"
+            placeholder="Search assignments…"
+            class="max-w-xs"
+          />
+          <USlideover v-if="isInstructor" v-model:open="isSlideoverOpen">
+            <UButton
+              color="primary"
+              icon="i-heroicons-plus"
+            >
+              Create assignment
+            </UButton>
+
+            <template #content>
+              <div class="p-4 flex-1 overflow-y-auto bg-white dark:bg-gray-900">
+                <div class="flex items-center justify-between mb-6">
+                  <h3 class="text-xl font-semibold text-gray-900 dark:text-white">
+                    Create Assignment
+                  </h3>
+                  <UButton
+                    color="gray"
+                    variant="ghost"
+                    icon="i-heroicons-x-mark"
+                    @click="isSlideoverOpen = false"
+                  />
+                </div>
+                
+                <UForm :state="assignmentState" @submit="createAssignment" class="flex flex-col gap-5">
+                  <div class="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg mb-2">
+                    <div class="text-sm text-blue-700 dark:text-blue-300">
+                      <span class="font-semibold">Target Course:</span> {{ course?.name }}<br />
+                      <span class="font-semibold">Target Section:</span> {{ section?.label ?? `Section ${section?.id}` }}
+                    </div>
+                  </div>
+                  
+                  <UFormField label="Assignment Name">
+                    <UInput v-model="assignmentState.name" required placeholder="e.g. Project 1" />
+                  </UFormField>
+                  
+                  <UFormField label="Description (Optional)">
+                    <UTextarea v-model="assignmentState.description" rows="3" placeholder="Brief details about the assignment..." />
+                  </UFormField>
+                  
+                  <UFormField label="Submission Policy">
+                    <USelectMenu
+                      v-model="assignmentState.submissionPolicyId"
+                      :items="policies || []"
+                      value-key="id"
+                      label-key="name"
+                      placeholder="Select Policy"
+                      required
+                    />
+                  </UFormField>
+                  
+                  <div class="flex flex-col gap-3 mt-2">
+                    <UCheckbox v-model="assignmentState.isPublic" label="Is Public (Visible in global catalog)" />
+                    <UCheckbox v-model="assignmentState.published" label="Published (Active for this section)" />
+                  </div>
+                  
+                  <div class="mt-6 flex justify-end gap-3">
+                    <UButton variant="ghost" color="gray" @click="isSlideoverOpen = false">Cancel</UButton>
+                    <UButton type="submit" color="primary">Create & Offer</UButton>
+                  </div>
+                </UForm>
+              </div>
+            </template>
+          </USlideover>
+        </div>
       </div>
 
       <!-- Loading Assignments -->
@@ -184,5 +305,7 @@ const filtered = computed(() => {
         </NuxtLink>
       </div>
     </div>
+
+
   </div>
 </template>

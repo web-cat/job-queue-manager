@@ -110,9 +110,11 @@ router
         router.patch('/users/:id/role', [UsersController, 'updateRole'])
         router.get('/terms', [TermsController, 'index'])
         router.post('/terms', [TermsController, 'store'])
-        router.get('/submission-policies', [SubmissionPoliciesController, 'index'])
       })
       .use(middleware.admin())
+
+    // Shared references (instructors and admins)
+    router.get('/submission-policies', [SubmissionPoliciesController, 'index'])
   })
   .prefix('/api')
   .use(middleware.auth({ guards: ['api'] }))
