@@ -67,7 +67,7 @@ export default class SubmissionsController {
    */
   async index({ auth, request, response }: HttpContext) {
     const user = auth.getUserOrFail()
-    const { page = 1, limit = 20, assignmentOfferingId } = request.qs()
+    const { page = 1, limit = 20, assignmentOfferingId, workoutId } = request.qs()
 
     const query = Submission.query()
       .where('user_id', user.id)
@@ -76,6 +76,10 @@ export default class SubmissionsController {
 
     if (assignmentOfferingId) {
       query.where('assignment_offering_id', assignmentOfferingId)
+    }
+
+    if (workoutId) {
+      query.where('workout_id', workoutId)
     }
 
     const submissions = await query.paginate(page, limit)

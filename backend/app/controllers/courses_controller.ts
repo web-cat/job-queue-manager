@@ -56,14 +56,25 @@ const enrollValidator = vine.compile(
 export default class CoursesController {
   /**
    * GET /api/courses
-   * List all visible courses
+   * List all visible courses that the user is enrolled in
    */
-  async index({ request, response }: HttpContext) {
+  async index({ auth, request, response }: HttpContext) {
+    const user = auth.getUserOrFail()
     const { page = 1, limit = 20 } = request.qs()
 
     const courses = await Course.query()
       .where('is_hidden', false)
+      .whereHas('sections', (sectionsQuery) => {
+        sectionsQuery.whereHas('enrollments', (enrollmentsQuery) => {
+          enrollmentsQuery.where('user_id', user.id)
+        })
+      })
       .preload('organization')
+      .preload('sections', (sectionsQuery) => {
+        sectionsQuery.whereHas('enrollments', (enrollmentsQuery) => {
+          enrollmentsQuery.where('user_id', user.id)
+        })
+      })
       .orderBy('name', 'asc')
       .paginate(page, limit)
 

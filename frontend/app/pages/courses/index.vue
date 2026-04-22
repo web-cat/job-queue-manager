@@ -9,15 +9,28 @@ const { data: response, pending } = await useAsyncData("courses", () =>
     .catch(() => []),
 );
 
-const courses = computed(() => response.value ?? []);
+const sections = computed(() => {
+  const flat: any[] = [];
+  for (const course of response.value ?? []) {
+    if (course.sections && course.sections.length > 0) {
+      for (const section of course.sections) {
+        flat.push({ ...section, course });
+      }
+    }
+  }
+  return flat;
+});
+
 const search = ref("");
 
 const filtered = computed(() => {
-  if (!search.value) return courses.value;
+  if (!search.value) return sections.value;
   const q = search.value.toLowerCase();
-  return courses.value.filter(
-    (c: any) =>
-      c.name?.toLowerCase().includes(q) || c.number?.toLowerCase().includes(q),
+  return sections.value.filter(
+    (s: any) =>
+      s.course.name?.toLowerCase().includes(q) || 
+      s.course.number?.toLowerCase().includes(q) ||
+      s.label?.toLowerCase().includes(q)
   );
 });
 </script>
@@ -68,9 +81,9 @@ const filtered = computed(() => {
 
     <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       <NuxtLink
-        v-for="course in filtered"
-        :key="course.id"
-        :to="`/courses/${course.id}`"
+        v-for="section in filtered"
+        :key="section.id"
+        :to="`/courses/${section.course.id}/sections/${section.id}`"
         class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 hover:border-[#861F41]/50 hover:shadow-md transition-all group"
       >
         <div class="flex items-start justify-between mb-3">
@@ -83,21 +96,17 @@ const filtered = computed(() => {
             />
           </div>
           <span class="text-xs font-mono text-gray-400">{{
-            course.number
+            section.course.number
           }}</span>
         </div>
         <h3
           class="font-semibold text-gray-900 dark:text-white group-hover:text-[#861F41] transition-colors line-clamp-1 mb-1"
         >
-          {{ course.name }}
+          {{ section.course.name }}
         </h3>
         <div class="text-xs text-gray-500 font-mono flex items-center gap-2">
-          <span>{{ course.organization?.name ?? "Virginia Tech" }}</span>
-          <span v-if="course.sections?.length"
-            >· {{ course.sections.length }} section{{
-              course.sections.length === 1 ? "" : "s"
-            }}</span
-          >
+          <span>{{ section.label ?? `Section ${section.id}` }}</span>
+          <span>· {{ section.course.organization?.name ?? "Virginia Tech" }}</span>
         </div>
       </NuxtLink>
     </div>

@@ -67,7 +67,7 @@ export default class AssignmentsController {
    */
   async index({ auth, request, response }: HttpContext) {
     const user = auth.getUserOrFail()
-    const { page = 1, limit = 20, isPublic } = request.qs()
+    const { page = 1, limit = 20, isPublic, sectionId } = request.qs()
 
     const query = Assignment.query()
       .where((q) => {
@@ -87,6 +87,12 @@ export default class AssignmentsController {
 
     if (isPublic !== undefined) {
       query.where('is_public', isPublic === 'true')
+    }
+
+    if (sectionId) {
+      query.whereHas('assignmentOfferings', (q) => {
+        q.where('course_offering_id', sectionId)
+      })
     }
 
     const assignments = await query.paginate(page, limit)
