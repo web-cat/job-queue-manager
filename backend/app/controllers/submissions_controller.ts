@@ -146,15 +146,6 @@ export default class SubmissionsController {
         archivePath,
       })
     } catch (error) {
-      // Return the correct matching response error if grading is unavailable or other service errors occur
-      if (
-        error instanceof Error &&
-        error.message === 'The grading cluster is currently unavailable.'
-      ) {
-        return response.serviceUnavailable({
-          message: error.message,
-        })
-      }
       return response.internalServerError({
         message: 'Failed to process submission',
         error: error instanceof Error ? error.message : 'Unknown upload error',

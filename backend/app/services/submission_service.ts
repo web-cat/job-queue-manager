@@ -97,11 +97,13 @@ export default class SubmissionService {
     submission = await Submission.findOrFail(submission.id)
 
     if (!success) {
-      await submission.merge({ status: 'failed_to_queue' }).save()
-      throw new Error('The grading cluster is currently unavailable.')
+      await submission.merge({ status: 'pending_queue' }).save()
+      console.warn(
+        `[SubmissionService] Submission ${submission.id} saved, but grading cluster is down. Queued for retry.`
+      )
+    } else {
+      await submission.merge({ status: 'pending', externalJobId: jobId }).save()
     }
-
-    await submission.merge({ status: 'pending', externalJobId: jobId }).save()
 
     return { submission, archivePath: objectKey }
   }
