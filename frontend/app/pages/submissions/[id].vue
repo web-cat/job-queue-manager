@@ -94,11 +94,11 @@ async function downloadFile() {
     <UButton
       variant="ghost"
       size="sm"
-      to="/submissions"
+      :to="submission?.workoutId ? { path: `/assignments/${submission.workoutId}`, query: { courseId: route.query.courseId, sectionId: route.query.sectionId } } : '/submissions'"
       icon="i-heroicons-arrow-left"
       class="mb-6"
     >
-      Back to submissions
+      Back to assignment
     </UButton>
 
     <div v-if="pending" class="space-y-4">

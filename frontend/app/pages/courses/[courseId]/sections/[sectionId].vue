@@ -138,7 +138,7 @@ const filtered = computed(() => {
         <NuxtLink
           v-for="assignment in filtered"
           :key="assignment.id"
-          :to="`/assignments/${assignment.id}`"
+          :to="`/assignments/${assignment.id}?courseId=${courseId}&sectionId=${sectionId}`"
           class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 hover:border-[#861F41]/50 hover:shadow-md transition-all group flex flex-col h-full"
         >
           <div class="flex items-start justify-between mb-3">

@@ -115,11 +115,11 @@ async function handleSubmit() {
     <UButton
       variant="ghost"
       size="sm"
-      to="/assignments"
+      :to="route.query.courseId && route.query.sectionId ? `/courses/${route.query.courseId}/sections/${route.query.sectionId}` : '/courses'"
       icon="i-heroicons-arrow-left"
       class="mb-6"
     >
-      Back to assignments
+      Back to section
     </UButton>
 
     <!-- Loading -->
@@ -193,7 +193,7 @@ async function handleSubmit() {
             <div class="flex gap-2">
               <UButton
                 v-if="submissionId"
-                :to="`/submissions/${submissionId}`"
+                :to="{ path: `/submissions/${submissionId}`, query: { courseId: route.query.courseId, sectionId: route.query.sectionId } }"
                 size="sm"
                 color="success"
                 variant="soft"
@@ -312,7 +312,7 @@ async function handleSubmit() {
               <NuxtLink
                 v-for="sub in submissions"
                 :key="sub.id"
-                :to="`/submissions/${sub.id}`"
+                :to="{ path: `/submissions/${sub.id}`, query: { courseId: route.query.courseId, sectionId: route.query.sectionId } }"
                 class="block p-3 rounded-lg border border-gray-100 dark:border-gray-800 hover:border-[#861F41]/50 bg-gray-50/50 dark:bg-gray-800/50 transition-colors group"
               >
                 <div class="flex items-center justify-between mb-1">
