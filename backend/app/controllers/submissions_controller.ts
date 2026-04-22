@@ -250,7 +250,6 @@ export default class SubmissionsController {
     return response.ok({
       ready: true,
       submissionId: submission.id,
-      score: submission.score,
     })
   }
 
