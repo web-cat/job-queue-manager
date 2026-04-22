@@ -2,6 +2,7 @@ import { test } from '@japa/runner'
 // import { skip } from 'node:test'
 import db from '@adonisjs/lucid/services/db'
 import { DateTime } from 'luxon'
+import User from '#models/user'
 
 async function createTerm() {
   const [term] = await db
@@ -26,7 +27,12 @@ async function loginAsUser(client: any) {
     email,
     password: 'password123',
   })
-  //   console.log('Register response:', JSON.stringify(register.body(), null, 2))
+  
+  // Promote user to Admin to pass Bouncer RBAC during tests
+  const user = await User.findByOrFail('email', email)
+  user.globalRoleId = 1
+  await user.save()
+
   return { token: register.body().token.token, email }
 }
 

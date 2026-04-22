@@ -42,6 +42,11 @@ const UsersController = () => import('#controllers/users_controller')
 const TermsController = () => import('#controllers/terms_controller')
 const SubmissionPoliciesController = () => import('#controllers/submission_policies_controller')
 
+// ── Global Route Matchers ────────────────────────────────────────────
+router.where('id', router.matchers.number())
+router.where('sectionId', router.matchers.number())
+router.where('userId', router.matchers.number())
+
 // ── Health check ─────────────────────────────────────────────────────
 router.get('/', async () => {
   return { hello: 'world' }
