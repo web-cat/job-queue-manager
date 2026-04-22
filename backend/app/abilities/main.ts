@@ -15,9 +15,5 @@
 import { Bouncer } from '@adonisjs/bouncer'
 
 /**
- * Delete the following ability to start from
- * scratch
+ * Add abilities here only when they enforce a real authorization check.
  */
-export const editUser = Bouncer.ability(() => {
-  return true
-})
