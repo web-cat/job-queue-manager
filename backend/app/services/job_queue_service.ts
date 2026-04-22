@@ -27,6 +27,7 @@
 
 import Submission from '#models/submission'
 import SubmissionResult from '#models/submission_result'
+import fs from 'node:fs/promises'
 import env from '#start/env'
 import { DateTime } from 'luxon'
 
@@ -55,13 +56,8 @@ export interface ExternalJobPayload {
  * JobQueueService
  *
  * Handles all communication with the other team's REST API.
- * This is the integration boundary between your system and theirs.
+ * This is the integration boundary between our system and theirs.
  *
- * TODO: Confirm with other team:
- *   1. What is their API base URL?
- *   2. What fields do they need in the job payload?
- *   3. What do they return when a job is accepted?
- *   4. How do results come back — webhook, polling, or shared DB?
  */
 export default class JobQueueService {
   private baseUrl = env.get('JOB_QUEUE_API_URL')
@@ -72,27 +68,31 @@ export default class JobQueueService {
    */
   async enqueue(
     submissionId: number,
-    storageUri: string,
+    fileBuffer: Buffer,
     imageTag: string,
     timeoutSeconds: number = 120,
     priority: number = 2
   ): Promise<{ success: boolean }> {
-    const payload = {
-      submission_id: submissionId,
-      priority: priority,
-      storage_uri: storageUri,
-      image_tag: imageTag,
-      timeout_seconds: timeoutSeconds,
-      callback_url: `${env.get('INTERNAL_APP_URL')}/api/submissions/webhook`,
-    }
+    const formData = new FormData()
+
+    // Append the standard text fields
+    formData.append('submission_id', submissionId.toString())
+    formData.append('job_priority', priority.toString())
+    formData.append('callback_url', `${env.get('INTERNAL_APP_URL')}/api/submissions/webhook`)
+    formData.append('docker_image_tag', imageTag.toString())
+    formData.append('timeout_seconds', timeoutSeconds.toString())
 
     try {
+      // Read the file into memory and append it as a Blob
+      const fileBlob = new Blob([fileBuffer], { type: 'application/zip' })
+      formData.append('submission_zip', fileBlob, `submission_${submissionId}.zip`)
+
+      // Send the heavy request to the other team
       const response = await fetch(`${this.baseUrl}/api/v1/jobs`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+        // Note: Do NOT set the 'Content-Type' header manually when using FormData.
+        // fetch will automatically set it to 'multipart/form-data' with the correct boundary.
+        body: formData,
       })
 
       if (!response.ok) {

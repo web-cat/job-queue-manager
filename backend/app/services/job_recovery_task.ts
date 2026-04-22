@@ -10,7 +10,7 @@ export default class JobRecoveryTask {
     const tenMinutesAgo = DateTime.now().minus({ minutes: 10 }).toSQL()
 
     const stuckSubmissions = await Submission.query()
-      .whereIn('status', ['PENDING', 'RUNNING', 'UPLOADING'])
+      .whereIn('status', ['pending', 'running', 'uploading'])
       .where('created_at', '<', tenMinutesAgo)
 
     for (const submission of stuckSubmissions) {

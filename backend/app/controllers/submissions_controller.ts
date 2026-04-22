@@ -11,12 +11,11 @@
 // OPERATION ORDER in store():
 //   1. Validate file presence and type
 //   2. Create submission_result stub (FK required by submission)
-//   3. Build objectKey from submission metadata
-//   4. Create submission record with filePath set to objectKey
-//   5. Upload file to MinIO
-//   6. On upload failure: delete submission + submissionResult, return 500
-//   7. Create enqueued_job record
-//   8. Return created records
+//   3. Create submission record with filePath set to objectKey
+//   4. Build objectKey from submission metadata and upload file to MinIO
+//   5. Update submission with final file path
+//   6. Enqueue with other team
+//   7. Update submission status to pending
 //
 // DEPENDENCIES: submission.ts, submission_result.ts, job_queue_service.ts,
 //   object_storage_service.ts
@@ -44,6 +43,7 @@ import SubmissionResult from '#models/submission_result'
 import Assignment from '#models/assignment'
 import AssignmentOffering from '#models/assignment_offering'
 import JobQueueService from '#services/job_queue_service'
+import fs from 'node:fs/promises'
 import { uploadFileToObjectStorage } from '#services/object_storage_service'
 import env from '#start/env'
 
@@ -163,11 +163,14 @@ export default class SubmissionsController {
     // ── Step 4: Build object key and upload to MinIO ──────────────
     const objectKey = `submissions/${submission.id}/input/${submissionArchive.clientName}`
 
+    // Read the file into a memory buffer
+    const fileBuffer = await fs.readFile(submissionArchive.tmpPath!)
+
     try {
       await uploadFileToObjectStorage(
         env.get('S3_BUCKET')!,
         objectKey,
-        submissionArchive.tmpPath,
+        fileBuffer,
         submissionArchive.type || 'application/zip'
       )
     } catch (error) {
@@ -200,11 +203,9 @@ export default class SubmissionsController {
     // Determine the image tag (use a fallback just in case the professor left it blank)
     const imageTag = assignment.dockerImageTag || 'vt-cs/default-grader:latest'
 
-    const fullStorageUri = `s3://${process.env.S3_BUCKET}/${objectKey}`
-
     const { success } = await this.jobQueueService.enqueue(
       submission.id,
-      fullStorageUri,
+      fileBuffer,
       imageTag,
       timeoutSeconds,
       2 // Standard priority
