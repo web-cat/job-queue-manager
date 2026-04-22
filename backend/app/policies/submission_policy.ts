@@ -9,9 +9,12 @@ export default class SubmissionPolicy extends BasePolicy {
     if (user.globalRoleId === 1) return true
 
     if (assignmentOfferingId) {
+      const offering = await AssignmentOffering.find(assignmentOfferingId)
+      if (!offering) return false
+
       const enrollment = await CourseEnrollment.query()
         .where('user_id', user.id)
-        .where('course_offering_id', assignmentOfferingId)
+        .where('course_offering_id', offering.courseOfferingId)
         .first()
       return !!enrollment
     }
@@ -33,9 +36,12 @@ export default class SubmissionPolicy extends BasePolicy {
     if (submission.userId === user.id) return true
 
     if (submission.assignmentOfferingId) {
+      const offering = await AssignmentOffering.find(submission.assignmentOfferingId)
+      if (!offering) return false
+
       const enrollment = await CourseEnrollment.query()
         .where('user_id', user.id)
-        .where('course_offering_id', submission.assignmentOfferingId)
+        .where('course_offering_id', offering.courseOfferingId)
         .first()
 
       return enrollment?.courseRoleId === 1 || enrollment?.courseRoleId === 2
