@@ -48,9 +48,6 @@ export default class Submission extends BaseModel {
   declare assignmentOfferingId: number | null
 
   @column()
-  declare score: number | null
-
-  @column()
   declare filePath: string | null
 
   @column()

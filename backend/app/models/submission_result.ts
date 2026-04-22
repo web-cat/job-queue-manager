@@ -53,6 +53,9 @@ export default class SubmissionResult extends BaseModel {
   @column()
   declare testOutput: string | null
 
+  @column()
+  declare artifactFilePath: string | null
+
   @column.dateTime()
   declare queuedAt: DateTime | null
 

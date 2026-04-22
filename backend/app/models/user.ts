@@ -55,6 +55,12 @@ export default class User extends compose(BaseModel, AuthFinder) {
   declare encryptedPassword: string
 
   @column()
+  declare APItId: string | null
+
+  @column()
+  declare APISecret: string | null
+
+  @column()
   declare firstName: string | null
 
   @column()

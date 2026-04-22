@@ -27,8 +27,8 @@
 
 import Submission from '#models/submission'
 import SubmissionResult from '#models/submission_result'
-import fs from 'node:fs/promises'
 import env from '#start/env'
+import { uploadFileToObjectStorage } from '#services/object_storage_service'
 import { DateTime } from 'luxon'
 
 export interface ExternalJobPayload {
@@ -122,10 +122,10 @@ export default class JobQueueService {
    * Check the status of a job.
    * Used if results come back via polling rather than webhook.
    */
-  async checkStatus(submissionId: number): Promise<any | null> {
-    console.warn(`[JobQueueService] checkStatus() is a stub — job ${submissionId} not checked`)
+  async checkStatus(jobId: number): Promise<any | null> {
+    console.warn(`[JobQueueService] checkStatus() is a stub — job ${jobId} not checked`)
     try {
-      const response = await fetch(`${this.baseUrl}/api/v1/jobs/${submissionId}/results`)
+      const response = await fetch(`${this.baseUrl}/api/v1/jobs/${jobId}`)
       if (!response.ok) return null
       return await response.json()
     } catch (error) {
@@ -174,10 +174,54 @@ export default class JobQueueService {
         })
         .save()
 
+      if (result.has_payload && result.payload_url) {
+        const minioPath = await this.downloadAndStorePayload(submissionId, result.payload_url)
+        if (minioPath) {
+          submissionResult.artifactFilePath = minioPath
+        }
+      }
+
       // Update submission to show feedback is ready for the student UI
       await submission.merge({ feedbackReady: true }).save()
     }
 
     console.warn('[JobQueueService] handleWebhook() is a stub — payload not processed', payload)
+  }
+
+  /**
+   * Downloads the artifact payload from the execution cluster
+   * and saves it permanently to the local MinIO bucket.
+   */
+  async downloadAndStorePayload(submissionId: number, payloadUrl: string): Promise<string | null> {
+    try {
+      // 1. Fetch the zip file from their cluster
+      // Note: payloadUrl is likely a relative path like "/api/v1/jobs/142/payload"
+      const response = await fetch(`${this.baseUrl}${payloadUrl}`)
+
+      if (!response.ok) {
+        console.error(`[JobQueueService] Failed to download payload: ${response.statusText}`)
+        return null
+      }
+
+      // 2. Read the raw binary data into a Node.js Buffer
+      const arrayBuffer = await response.arrayBuffer()
+      const fileBuffer = Buffer.from(arrayBuffer)
+
+      // 3. Define where this goes in MinIO
+      const objectKey = `submissions/${submissionId}/output/results_payload.zip`
+
+      // 4. Upload directly to MinIO using the buffer setup we created earlier
+      await uploadFileToObjectStorage(
+        env.get('S3_BUCKET')!,
+        objectKey,
+        fileBuffer,
+        'application/zip'
+      )
+
+      return objectKey
+    } catch (error) {
+      console.error(`[JobQueueService] Error processing payload for ${submissionId}:`, error)
+      return null
+    }
   }
 }
