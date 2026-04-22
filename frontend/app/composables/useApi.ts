@@ -14,8 +14,21 @@ import { useAuthStore } from "~/stores/auth";
 export function useApi() {
   const config = useRuntimeConfig();
   const authStore = useAuthStore();
+  const toast = useToast();
 
   const baseURL = config.public.apiBase;
+
+  const handleResponseError = async ({ response }: any) => {
+    if (response.status === 403) {
+      toast.add({
+        title: "Access Denied",
+        description: response._data?.message || "You do not have permission to perform this action.",
+        color: "red"
+      });
+      // Re-fetch user to sync roles in case they changed
+      await authStore.me();
+    }
+  };
 
   function getHeaders(body?: unknown): Record<string, string> {
     const headers: Record<string, string> = {};
@@ -37,6 +50,7 @@ export function useApi() {
       method: "GET",
       headers: getHeaders(),
       params,
+      onResponseError: handleResponseError,
     });
   }
 
@@ -48,6 +62,7 @@ export function useApi() {
       method: "POST",
       headers: getHeaders(body),
       body: body as any,
+      onResponseError: handleResponseError,
     });
   }
 
@@ -59,6 +74,7 @@ export function useApi() {
       method: "PATCH",
       headers: getHeaders(body),
       body: body as any,
+      onResponseError: handleResponseError,
     });
   }
 
@@ -66,6 +82,7 @@ export function useApi() {
     return $fetch<T>(`${baseURL}/api${path}`, {
       method: "DELETE",
       headers: getHeaders(),
+      onResponseError: handleResponseError,
     });
   }
 

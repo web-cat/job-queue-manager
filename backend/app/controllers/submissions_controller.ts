@@ -45,6 +45,7 @@ import JobQueueService from '#services/job_queue_service'
 import { uploadFileToObjectStorage, getFileStreamFromObjectStorage } from '#services/object_storage_service'
 import env from '#start/env'
 import router from '@adonisjs/core/services/router'
+import SubmissionPolicy from '#policies/submission_policy'
 
 // ── Validators ───────────────────────────────────────────────────────
 
@@ -90,17 +91,15 @@ export default class SubmissionsController {
   /**
    * GET /api/submissions/:id
    * Get a single submission with its enqueued job and assignment info.
-   * Only returns submissions belonging to the authenticated user.
    */
-  async show({ auth, params, response }: HttpContext) {
-    const user = auth.getUserOrFail()
-
+  async show({ bouncer, params, response }: HttpContext) {
     const submission = await Submission.query()
       .where('id', params.id)
-      .where('user_id', user.id)
       .preload('assignmentOffering', (q) => q.preload('assignment'))
       .preload('enqueuedJob')
       .firstOrFail()
+
+    await bouncer.with(SubmissionPolicy).authorize('view', submission)
 
     return response.ok(submission)
   }
@@ -115,9 +114,11 @@ export default class SubmissionsController {
    *   isSubmissionForGrading (boolean, optional, default true)
    *   submission_zip        (file, required) — zip archive, max 100mb
    */
-  async store({ auth, request, response }: HttpContext) {
+  async store({ auth, bouncer, request, response }: HttpContext) {
     const user = auth.getUserOrFail()
     const data = await request.validateUsing(createSubmissionValidator)
+
+    await bouncer.with(SubmissionPolicy).authorize('create', data.workoutId, data.assignmentOfferingId)
 
     // ── Step 1: Validate uploaded file ───────────────────────────
     const submissionArchive = request.file('submission_zip', {
@@ -211,13 +212,12 @@ export default class SubmissionsController {
    * NOTE: score is read from submission.score — confirm with other team
    * whether they write to this column or to submission_result.correctness_score.
    */
-  async result({ auth, params, response }: HttpContext) {
-    const user = auth.getUserOrFail()
-
+  async result({ bouncer, params, response }: HttpContext) {
     const submission = await Submission.query()
       .where('id', params.id)
-      .where('user_id', user.id)
       .firstOrFail()
+
+    await bouncer.with(SubmissionPolicy).authorize('view', submission)
 
     if (!submission.feedbackReady) {
       return response.ok({ ready: false, message: 'Grading is still in progress' })
@@ -232,9 +232,10 @@ export default class SubmissionsController {
 
   /**
    * PUT/PATCH /api/submissions/:id
-   * Update a submission (stub — not currently used by frontend).
+   * Update a submission
    */
-  async update({ params, request, response }: HttpContext) {
+  async update({ bouncer, params, request, response }: HttpContext) {
+    await bouncer.with(SubmissionPolicy).authorize('update')
     const submission = await Submission.findOrFail(params.id)
     const data = request.only(['feedbackReady', 'score'])
     await submission.merge(data).save()
@@ -243,9 +244,10 @@ export default class SubmissionsController {
 
   /**
    * DELETE /api/submissions/:id
-   * Delete a submission (stub — not currently used by frontend).
+   * Delete a submission
    */
-  async destroy({ params, response }: HttpContext) {
+  async destroy({ bouncer, params, response }: HttpContext) {
+    await bouncer.with(SubmissionPolicy).authorize('delete')
     const submission = await Submission.findOrFail(params.id)
     await submission.delete()
     return response.noContent()
@@ -274,13 +276,12 @@ export default class SubmissionsController {
    * GET /api/submissions/:id/download-url
    * Generates a signed, short-lived URL for downloading the submission.
    */
-  async downloadUrl({ auth, params, response }: HttpContext) {
-    const user = auth.getUserOrFail()
-
+  async downloadUrl({ bouncer, params, response }: HttpContext) {
     const submission = await Submission.query()
       .where('id', params.id)
-      .where('user_id', user.id)
       .firstOrFail()
+
+    await bouncer.with(SubmissionPolicy).authorize('view', submission)
 
     if (!submission.filePath) {
       return response.notFound({ message: 'No file associated with this submission' })
