@@ -66,7 +66,6 @@ const webhookPayloadValidator = vine.compile(
           tool_score: vine.number().optional(),
           comments: vine.string().optional(),
           comment_format: vine.string().optional(),
-          commentFormat: vine.string().optional(),
           runtime_ms: vine.number().optional(),
           exit_code: vine.number().optional(),
           test_output: vine.string().optional(),
