@@ -56,8 +56,23 @@ export interface ExternalJobPayload {
  *
  */
 export default class JobQueueService {
-  private baseUrl = env.get('JOB_QUEUE_API_URL')
+  private readonly baseUrl: string
 
+  constructor() {
+    this.baseUrl = this.getRequiredBaseUrl()
+  }
+
+  private getRequiredBaseUrl(): string {
+    const baseUrl = env.get('JOB_QUEUE_API_URL')
+
+    if (typeof baseUrl !== 'string' || baseUrl.trim() === '') {
+      throw new Error(
+        'Missing required JOB_QUEUE_API_URL configuration for JobQueueService'
+      )
+    }
+
+    return baseUrl
+  }
   /**
    * Submit a job to the other team's REST API.
    * Called after a submission is created.
