@@ -156,7 +156,7 @@ test.group('Submissions — webhook', () => {
     response.assertBodyContains({ received: true })
   })
 
-  test('returns 400 for invalid webhook payload shape', async ({ client }) => {
+  test('returns 400 for invalid webhook payload shape', async ({ client, assert }) => {
     const response = await client.post('/api/submissions/webhook').json({
       submissionId: 1,
       score: 95,
@@ -164,6 +164,9 @@ test.group('Submissions — webhook', () => {
     })
 
     response.assertStatus(400)
+    const body = response.body()
+    assert.isArray(body.errors)
+    assert.isAbove(body.errors.length, 0)
   })
 })
 
