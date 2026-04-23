@@ -9,17 +9,50 @@ const { data: response, pending } = await useAsyncData("courses", () =>
     .catch(() => []),
 );
 
-const courses = computed(() => response.value ?? []);
+const sections = computed(() => {
+  const flat: any[] = [];
+  for (const course of response.value ?? []) {
+    if (course.sections && course.sections.length > 0) {
+      for (const section of course.sections) {
+        flat.push({ ...section, course });
+      }
+    }
+  }
+  return flat;
+});
+
 const search = ref("");
 
 const filtered = computed(() => {
-  if (!search.value) return courses.value;
+  if (!search.value) return sections.value;
   const q = search.value.toLowerCase();
-  return courses.value.filter(
-    (c: any) =>
-      c.name?.toLowerCase().includes(q) || c.number?.toLowerCase().includes(q),
+  return sections.value.filter(
+    (s: any) =>
+      s.course.name?.toLowerCase().includes(q) || 
+      s.course.number?.toLowerCase().includes(q) ||
+      s.label?.toLowerCase().includes(q)
   );
 });
+
+function getRoleLabel(roleId: number) {
+  switch (roleId) {
+    case 1: return "Instructor";
+    case 2: return "TA";
+    case 3: return "Student";
+    case 4: return "Observer";
+    default: return "Student";
+  }
+}
+
+function getRoleColor(roleId: number) {
+  switch (roleId) {
+    case 1: return "fuchsia";
+    case 2: return "violet";
+    case 3: return "blue";
+    case 4: return "gray";
+    default: return "blue";
+  }
+}
 </script>
 
 <template>
@@ -68,36 +101,41 @@ const filtered = computed(() => {
 
     <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       <NuxtLink
-        v-for="course in filtered"
-        :key="course.id"
-        :to="`/courses/${course.id}`"
+        v-for="section in filtered"
+        :key="section.id"
+        :to="`/courses/${section.course.id}/sections/${section.id}`"
         class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 hover:border-[#861F41]/50 hover:shadow-md transition-all group"
       >
         <div class="flex items-start justify-between mb-3">
-          <div
-            class="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center"
-          >
-            <UIcon
-              name="i-heroicons-academic-cap"
-              class="w-5 h-5 text-blue-600 dark:text-blue-400"
+          <div class="flex items-center gap-3">
+            <div
+              class="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center"
+            >
+              <UIcon
+                name="i-heroicons-academic-cap"
+                class="w-5 h-5 text-blue-600 dark:text-blue-400"
+              />
+            </div>
+            <UBadge
+              v-if="section.enrollments?.[0]?.courseRoleId"
+              :label="getRoleLabel(section.enrollments[0].courseRoleId)"
+              :color="getRoleColor(section.enrollments[0].courseRoleId)"
+              variant="subtle"
+              size="xs"
             />
           </div>
           <span class="text-xs font-mono text-gray-400">{{
-            course.number
+            section.course.number
           }}</span>
         </div>
         <h3
           class="font-semibold text-gray-900 dark:text-white group-hover:text-[#861F41] transition-colors line-clamp-1 mb-1"
         >
-          {{ course.name }}
+          {{ section.course.name }}
         </h3>
         <div class="text-xs text-gray-500 font-mono flex items-center gap-2">
-          <span>{{ course.organization?.name ?? "Virginia Tech" }}</span>
-          <span v-if="course.sections?.length"
-            >· {{ course.sections.length }} section{{
-              course.sections.length === 1 ? "" : "s"
-            }}</span
-          >
+          <span>{{ section.label ?? `Section ${section.id}` }}</span>
+          <span>· {{ section.course.organization?.name ?? "Virginia Tech" }}</span>
         </div>
       </NuxtLink>
     </div>
