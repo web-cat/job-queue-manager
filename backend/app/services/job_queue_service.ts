@@ -99,8 +99,8 @@ export default class JobQueueService {
         return { success: false }
       }
 
-      console.warn(
-        `[JobQueueService] enqueue() is a stub — submission ${submissionId} not actually sent`
+      console.info(
+        `[JobQueueService] Submitted submission ${submissionId} to execution API as job ${jobId}`
       )
 
       return { success: true, jobId }
