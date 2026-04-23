@@ -51,6 +51,33 @@ const createSubmissionValidator = vine.compile(
   })
 )
 
+const webhookPayloadValidator = vine.compile(
+  vine.object({
+    data: vine.object({
+      submission_id: vine.number().positive(),
+      status: vine.string(),
+      submitted_at: vine.string().optional(),
+      started_at: vine.string().optional(),
+      completed_at: vine.string().optional(),
+      retry_count: vine.number().optional(),
+      result: vine
+        .object({
+          correctness_score: vine.number().optional(),
+          tool_score: vine.number().optional(),
+          comments: vine.string().optional(),
+          comment_format: vine.string().optional(),
+          commentFormat: vine.string().optional(),
+          runtime_ms: vine.number().optional(),
+          exit_code: vine.number().optional(),
+          test_output: vine.string().optional(),
+          has_payload: vine.boolean().optional(),
+          payload_url: vine.string().optional(),
+        })
+        .optional(),
+    }),
+  })
+)
+
 // ── Controller ───────────────────────────────────────────────────────
 
 @inject()
@@ -213,7 +240,7 @@ export default class SubmissionsController {
    * SECURITY: Should be IP restricted to other team's cluster IPs in production.
    */
   async webhook({ request, response }: HttpContext) {
-    const payload = request.body()
+    const payload = await request.validateUsing(webhookPayloadValidator)
     await this.submissionService.handleWebhook(payload)
     return response.ok({ received: true })
   }
