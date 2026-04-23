@@ -94,9 +94,10 @@ export default class JobQueueService {
     formData.append('timeout_seconds', timeoutSeconds.toString())
 
     try {
-      // Read the file into memory and append it as a Blob
+      // Read the file into memory and append it as a Blob.
+      // The execution-service API documents the multipart file field as `files`.
       const fileBlob = new Blob([fileBuffer], { type: 'application/zip' })
-      formData.append('submission_zip', fileBlob, `submission_${submissionId}.zip`)
+      formData.append('files', fileBlob, `submission_${submissionId}.zip`)
 
       // Send the heavy request to the other team
       const response = await fetch(`${this.baseUrl}/api/v1/jobs`, {
