@@ -2,6 +2,7 @@ import Submission from '#models/submission'
 import JobQueueService from '#services/job_queue_service'
 import SubmissionService from '#services/submission_service'
 import { inject } from '@adonisjs/core'
+import logger from '@adonisjs/core/services/logger'
 import { DateTime } from 'luxon'
 import { downloadFileFromObjectStorage } from '#services/object_storage_service'
 import env from '#start/env'
@@ -35,7 +36,7 @@ export default class JobRecoveryTask {
 
       if (payload && payload.data.status === 'completed') {
         // If it's done, feed it directly into our webhook handler
-        console.log(`[Recovery] Recovered lost grade for submission ${submission.id}`)
+        logger.info(`[Recovery] Recovered lost grade for submission ${submission.id}`)
         await this.submissionService.handleWebhook(payload)
       }
     }
@@ -48,7 +49,7 @@ export default class JobRecoveryTask {
       .where('created_at', '<', fortyEightHoursAgo)
 
     for (const submission of failedHopelessSubmissions) {
-      console.warn(
+      logger.warn(
         `[Recovery] Submission ${submission.id} failed to queue after 48 hours. Marking as failed.`
       )
       await submission.merge({ status: 'failed' }).save()
@@ -61,10 +62,10 @@ export default class JobRecoveryTask {
       .preload('assignmentOffering', (q) => q.preload('assignment'))
 
     for (const submission of queuedSubmissions) {
-      console.log(`[Recovery] Retrying enqueue for submission ${submission.id}`)
+      logger.info(`[Recovery] Retrying enqueue for submission ${submission.id}`)
 
       if (!submission.filePath) {
-        console.error(`[Recovery] Submission ${submission.id} has no file path to retry`)
+        logger.error(`[Recovery] Submission ${submission.id} has no file path to retry`)
         continue
       }
 
@@ -93,12 +94,15 @@ export default class JobRecoveryTask {
 
         if (success) {
           await submission.merge({ status: 'pending', externalJobId: jobId }).save()
-          console.log(`[Recovery] Successfully queued submission ${submission.id}`)
+          logger.info(`[Recovery] Successfully queued submission ${submission.id}`)
         } else {
-          console.warn(`[Recovery] Still unable to queue submission ${submission.id}`)
+          logger.warn(`[Recovery] Still unable to queue submission ${submission.id}`)
         }
       } catch (error) {
-        console.error(`[Recovery] Error retrying enqueue for submission ${submission.id}:`, error)
+        logger.error(
+          { err: error },
+          `[Recovery] Error retrying enqueue for submission ${submission.id}`
+        )
       }
     }
   }
