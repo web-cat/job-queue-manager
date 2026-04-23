@@ -130,7 +130,7 @@ export default class JobQueueService {
    * Used if results come back via polling rather than webhook.
    */
   async checkStatus(jobId: number): Promise<any | null> {
-    console.warn(`[JobQueueService] checkStatus() is a stub — job ${jobId} not checked`)
+    console.info(`[JobQueueService] Checking status for job ${jobId} via execution API`)
     try {
       const response = await fetch(`${this.baseUrl}/api/v1/jobs/${jobId}`)
       if (!response.ok) return null
