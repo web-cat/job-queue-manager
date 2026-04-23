@@ -165,6 +165,12 @@ export default class SubmissionService {
       await submission.merge({ feedbackReady: true }).save()
     }
 
-    console.warn('[SubmissionService] handleWebhook() processed payload', payload)
+    console.info('[SubmissionService] handleWebhook() processed', {
+      submissionId,
+      status,
+      retryCount,
+      hasResult: !!result,
+      feedbackReady: submission.feedbackReady,
+    })
   }
 }
