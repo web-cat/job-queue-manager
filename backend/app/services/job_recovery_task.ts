@@ -19,11 +19,19 @@ export default class JobRecoveryTask {
 
     const stuckSubmissions = await Submission.query()
       .whereIn('status', ['pending', 'uploading'])
+      .whereNotNull('external_job_id')
       .where('created_at', '<', tenMinutesAgo)
 
     for (const submission of stuckSubmissions) {
+      if (!submission.externalJobId) {
+        console.warn(
+          `[Recovery] Skipping submission ${submission.id} because it has no external job ID`
+        )
+        continue
+      }
+
       // Call the GET endpoint to see what the other team says
-      const payload = await this.jobQueueService.checkStatus(submission.externalJobId!)
+      const payload = await this.jobQueueService.checkStatus(submission.externalJobId)
 
       if (payload && payload.data.status === 'completed') {
         // If it's done, feed it directly into our webhook handler
