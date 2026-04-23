@@ -26,6 +26,7 @@
 //    STATUS: stub [CRITICAL — must be implemented before production deployment]
 
 import env from '#start/env'
+import logger from '@adonisjs/core/services/logger'
 
 export interface ExternalJobPayload {
   data: {
@@ -66,9 +67,7 @@ export default class JobQueueService {
     const baseUrl = env.get('JOB_QUEUE_API_URL')
 
     if (typeof baseUrl !== 'string' || baseUrl.trim() === '') {
-      throw new Error(
-        'Missing required JOB_QUEUE_API_URL configuration for JobQueueService'
-      )
+      throw new Error('Missing required JOB_QUEUE_API_URL configuration for JobQueueService')
     }
 
     return baseUrl
@@ -115,9 +114,17 @@ export default class JobQueueService {
         return { success: false }
       }
 
-      const responseData = (await response.json()) as { data: { job_id: number } }
-      const jobId = responseData.data.job_id
-      console.info(
+      const responseData = (await response.json()) as { data?: { job_id?: unknown } }
+      const jobId = responseData.data?.job_id
+
+      if (typeof jobId !== 'number' || !Number.isInteger(jobId)) {
+        logger.error(
+          `[JobQueueService] API response missing valid job_id for submission ${submissionId}`
+        )
+        return { success: false }
+      }
+
+      logger.info(
         `[JobQueueService] Submitted submission ${submissionId} to execution API as job ${jobId}`
       )
 
