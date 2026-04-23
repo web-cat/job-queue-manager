@@ -37,9 +37,11 @@
 
 import type { HttpContext } from '@adonisjs/core/http'
 import { inject } from '@adonisjs/core'
+import router from '@adonisjs/core/services/router'
 import vine from '@vinejs/vine'
 import Submission from '#models/submission'
 import SubmissionService from '#services/submission_service'
+import SubmissionPolicy from '#policies/submission_policy'
 
 // ── Validators ───────────────────────────────────────────────────────
 
@@ -138,7 +140,9 @@ export default class SubmissionsController {
     const user = auth.getUserOrFail()
     const data = await request.validateUsing(createSubmissionValidator)
 
-    await bouncer.with(SubmissionPolicy).authorize('create', data.workoutId, data.assignmentOfferingId)
+    await bouncer
+      .with(SubmissionPolicy)
+      .authorize('create', data.workoutId, data.assignmentOfferingId)
 
     // Validate uploaded file
     const submissionArchive = request.file('submission_zip', {
@@ -192,9 +196,7 @@ export default class SubmissionsController {
    * whether they write to this column or to submission_result.correctness_score.
    */
   async result({ bouncer, params, response }: HttpContext) {
-    const submission = await Submission.query()
-      .where('id', params.id)
-      .firstOrFail()
+    const submission = await Submission.query().where('id', params.id).firstOrFail()
 
     await bouncer.with(SubmissionPolicy).authorize('view', submission)
 
@@ -249,9 +251,7 @@ export default class SubmissionsController {
    * Generates a signed, short-lived URL for downloading the submission.
    */
   async downloadUrl({ bouncer, params, response }: HttpContext) {
-    const submission = await Submission.query()
-      .where('id', params.id)
-      .firstOrFail()
+    const submission = await Submission.query().where('id', params.id).firstOrFail()
 
     await bouncer.with(SubmissionPolicy).authorize('view', submission)
 
@@ -276,21 +276,20 @@ export default class SubmissionsController {
       return response.unauthorized({ message: 'Invalid or expired download link' })
     }
 
-    const submission = await Submission.findOrFail(params.id)
-
-    if (!submission.filePath) {
-      return response.notFound({ message: 'No file associated with this submission' })
-    }
-
     try {
-      const stream = await getFileStreamFromObjectStorage(env.get('S3_BUCKET'), submission.filePath)
-      const filename = submission.filePath.split('/').pop() || 'submission.zip'
-      
+      const { fileBuffer, filename } = await this.submissionService.getSubmissionDownload(
+        Number(params.id)
+      )
+
       response.header('Content-Disposition', `attachment; filename="${filename}"`)
       response.header('Content-Type', 'application/zip')
-      
-      return response.stream(stream as any)
+
+      return response.send(fileBuffer)
     } catch (error) {
+      if (error instanceof Error && error.message === 'No file associated with this submission') {
+        return response.notFound({ message: error.message })
+      }
+
       return response.internalServerError({ message: 'Failed to download file' })
     }
   }

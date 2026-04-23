@@ -76,7 +76,6 @@ export default class JobRecoveryTask {
         (await import('#models/assignment').then((m) => m.default.findOrFail(submission.workoutId)))
 
       const imageTag = assignment.dockerImageTag || 'vt-cs/default-grader:latest'
-      const timeoutSeconds = submission.assignmentOffering?.timeLimit ?? 120
 
       try {
         const fileBuffer = await downloadFileFromObjectStorage(
@@ -88,7 +87,6 @@ export default class JobRecoveryTask {
           submission.id,
           fileBuffer,
           imageTag,
-          timeoutSeconds,
           2
         )
 

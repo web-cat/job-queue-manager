@@ -11,7 +11,7 @@ async function loginAsUser(client: any) {
     email,
     password: 'password123',
   })
-  
+
   // Promote user to Admin to pass Bouncer RBAC during tests
   const user = await User.findByOrFail('email', email)
   user.globalRoleId = 1
@@ -161,12 +161,27 @@ test.group('Submissions — webhook', () => {
 
   test('returns 400 for invalid webhook payload shape', async ({ client, assert }) => {
     const response = await client.post('/api/submissions/webhook').json({
-      submissionId: 1,
-      score: 95,
-      feedbackReady: true,
+      data: {
+        status: 'completed',
+        submitted_at: new Date().toISOString(),
+        started_at: new Date().toISOString(),
+        completed_at: new Date().toISOString(),
+        retry_count: 0,
+        result: {
+          correctness_score: 95,
+          tool_score: 0,
+          comments: '',
+          commentFormat: 0,
+          runtime_ms: 100,
+          exit_code: 0,
+          test_output: '',
+          has_payload: false,
+          payload_url: null,
+        },
+      },
     })
 
-    response.assertStatus(400)
+    response.assertStatus(422)
     const body = response.body()
     assert.isArray(body.errors)
     assert.isAbove(body.errors.length, 0)

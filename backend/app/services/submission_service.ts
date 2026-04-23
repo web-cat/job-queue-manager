@@ -3,10 +3,12 @@ import db from '@adonisjs/lucid/services/db'
 import Submission from '#models/submission'
 import SubmissionResult from '#models/submission_result'
 import Assignment from '#models/assignment'
-import AssignmentOffering from '#models/assignment_offering'
 import JobQueueService from '#services/job_queue_service'
 import fs from 'node:fs/promises'
-import { uploadFileToObjectStorage } from '#services/object_storage_service'
+import {
+  downloadFileFromObjectStorage,
+  uploadFileToObjectStorage,
+} from '#services/object_storage_service'
 import env from '#start/env'
 import { DateTime } from 'luxon'
 import type { MultipartFile } from '@adonisjs/core/bodyparser'
@@ -15,6 +17,22 @@ import type { MultipartFile } from '@adonisjs/core/bodyparser'
 export default class SubmissionService {
   constructor(private jobQueueService: JobQueueService) {}
 
+  async getSubmissionDownload(submissionId: number) {
+    const submission = await Submission.findOrFail(submissionId)
+
+    if (!submission.filePath) {
+      throw new Error('No file associated with this submission')
+    }
+
+    const fileBuffer = await downloadFileFromObjectStorage(
+      env.get('S3_BUCKET')!,
+      submission.filePath
+    )
+    const filename = submission.filePath.split('/').pop() || 'submission.zip'
+
+    return { fileBuffer, filename }
+  }
+
   async processSubmission(userId: number, data: any, archive: MultipartFile) {
     // 1. Start a database transaction
     const trx = await db.transaction()
@@ -22,7 +40,6 @@ export default class SubmissionService {
     let objectKey: string
     let fileBuffer: Buffer
     let imageTag: string
-    let timeoutSeconds = 120
 
     try {
       // 2. Create records using the transaction client
@@ -66,15 +83,6 @@ export default class SubmissionService {
       const assignment = await Assignment.findOrFail(data.workoutId, { client: trx })
       imageTag = assignment.dockerImageTag || 'vt-cs/default-grader:latest'
 
-      if (data.assignmentOfferingId) {
-        const offering = await AssignmentOffering.findOrFail(data.assignmentOfferingId, {
-          client: trx,
-        })
-        if (offering.timeLimit) {
-          timeoutSeconds = offering.timeLimit
-        }
-      }
-
       // Commit before network call so the external system/jobQueueService can find the submission
       await trx.commit()
     } catch (error) {
@@ -89,7 +97,6 @@ export default class SubmissionService {
       submission.id,
       fileBuffer,
       imageTag,
-      timeoutSeconds,
       2
     )
 

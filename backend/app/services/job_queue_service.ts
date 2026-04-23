@@ -80,17 +80,15 @@ export default class JobQueueService {
     submissionId: number,
     fileBuffer: Buffer,
     imageTag: string,
-    timeoutSeconds: number = 120,
     priority: number = 2
   ): Promise<{ success: boolean; jobId?: number }> {
     const formData = new FormData()
 
     // Append the standard text fields
     formData.append('submission_id', submissionId.toString())
-    formData.append('job_priority', priority.toString())
+    formData.append('priority', priority.toString())
     formData.append('callback_url', `${env.get('INTERNAL_APP_URL')}/api/submissions/webhook`)
     formData.append('docker_image_tag', imageTag.toString())
-    formData.append('timeout_seconds', timeoutSeconds.toString())
 
     try {
       // Read the file into memory and append it as a Blob.
