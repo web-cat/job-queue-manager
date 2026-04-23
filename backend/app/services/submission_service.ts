@@ -135,7 +135,7 @@ export default class SubmissionService {
           correctnessScore: result.correctness_score,
           toolScore: result.tool_score,
           comments: result.comments,
-          commentFormat: result.commentFormat,
+          commentFormat: result.comment_format ?? result.commentFormat,
           runtimeMs: result.runtime_ms,
           exitCode: result.exit_code,
           testOutput: result.test_output,
