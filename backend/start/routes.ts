@@ -2,32 +2,24 @@
 // truth for what endpoints exist, their HTTP methods, and which middleware
 // protects them.
 
-// DESIGN: Routes are organized into two groups: public (no auth required) and
-// protected (API token required via middleware.auth). All routes are prefixed
-// with /api for clarity. The webhook route is intentionally public because it
-// receives callbacks from the other team's system — consider adding IP
-// restriction middleware in production. Resource routes (router.resource())
-// generate standard CRUD endpoints automatically.
-
-// DEPENDENCIES: All controllers, middleware (auth, admin), kernel.ts
-
+// DESIGN: Routes are split into three groups:
+//   1. Public routes — no auth required (register, login, CAS, LTI, webhook)
+//   2. Session API (/api) — AdonisJS token auth, used by the Nuxt frontend
+//   3. External Tool API (/api/v1) — HMAC-SHA256 signed requests, used by
+//      scripts, IDE plugins, and instructor automation tools
+//
+// The session and external tool APIs share the same route definitions via
+// registerApiRoutes() — any new route added there appears in both APIs.
+// Bouncer policies apply identically in both groups since the HMAC middleware
+// injects the client's owner user into the auth context.
+//
+// DEPENDENCIES: All controllers, middleware (auth, admin, oauthSignature), kernel.ts
 // CONSUMERS: AdonisJS HTTP server
-
-// NEXT TEAM NOTES: When adding new features, add routes here first then create
-// the corresponding controller methods. Keep the public/protected grouping
-// clear. CAS auth routes will need to be added as public routes (the redirect
-// and callback cannot require an existing token). LTI launch endpoints are
-// also public.
-
-// STATUS: complete [NEEDS INLINE DOCS — webhook IP restriction note]
 
 /*
 |--------------------------------------------------------------------------
 | Routes file
 |--------------------------------------------------------------------------
-|
-| The routes file is used for defining the HTTP routes.
-|
 */
 import router from '@adonisjs/core/services/router'
 import { middleware } from '#start/kernel'
@@ -41,20 +33,25 @@ const CoursesController = () => import('#controllers/courses_controller')
 const UsersController = () => import('#controllers/users_controller')
 const TermsController = () => import('#controllers/terms_controller')
 const SubmissionPoliciesController = () => import('#controllers/submission_policies_controller')
+const OAuthController = () => import('#controllers/oauth_controller')
 
-// ── Global Route Matchers ────────────────────────────────────────────
+// ── Global Route Matchers ─────────────────────────────────────────────
 router.where('id', router.matchers.number())
 router.where('sectionId', router.matchers.number())
 router.where('userId', router.matchers.number())
 
-// ── Health check ─────────────────────────────────────────────────────
+// ── Health check ──────────────────────────────────────────────────────
 router.get('/', async () => {
   return { hello: 'world' }
 })
 
-// ── Public auth routes (no token required) ───────────────────────────
+// ── Public auth routes (no token required) ────────────────────────────
 router.post('/api/auth/register', [AuthController, 'register'])
 router.post('/api/auth/login', [AuthController, 'login'])
+
+// ── OAuth 2.0 token exchange (public) ────────────────────────────────
+// Alternative to HMAC signing — exchange client_id + secret for Bearer token
+router.post('/api/oauth/token', [OAuthController, 'token'])
 
 // ── CAS SSO routes (public — CAS handles its own auth) ───────────────
 // NOTE: Only works on Discovery cluster, not localhost
@@ -62,64 +59,89 @@ router.get('/api/auth/cas', [CasController, 'redirect'])
 router.get('/api/auth/cas/callback', [CasController, 'callback'])
 router.get('/api/auth/cas/logout', [CasController, 'logout'])
 
-// ── LTI routes (public — Canvas POSTs directly with OAuth signature) ─
-// Security is provided by OAuth HMAC-SHA1 signature validation,
-// not by API token auth. These MUST remain public.
+// ── LTI 1.3 routes (public — Canvas POSTs directly) ──────────────────
+// MUST remain public — security provided by OIDC flow, not session tokens
+router.post('/api/lti/init', [LtiController, 'init'])
 router.post('/api/lti/launch', [LtiController, 'launch'])
+router.get('/api/lti/jwks', [LtiController, 'jwks'])
 
-// ── Webhook from other team — public but should be IP restricted ─────
-// TODO: Add IP restriction middleware once other team confirms their IPs
+// ── Webhook from partner team (public) ───────────────────────────────
+// TODO: Add IP restriction middleware once partner team confirms their IPs
 router.post('/api/submissions/webhook', [SubmissionsController, 'webhook'])
 
-// ── Public download route (protected by signed URL) ──────────────────
-router.get('/api/submissions/:id/download', [SubmissionsController, 'download']).as('submissions.download')
-
-// ── Protected routes (API token required) ────────────────────────────
+// ── Public download route (signed MinIO URL) ──────────────────────────
 router
-  .group(() => {
-    // Auth
-    router.delete('/auth/logout', [AuthController, 'logout'])
-    router.get('/auth/me', [AuthController, 'me'])
-    router.post('/auth/tokens', [AuthController, 'createToken'])
-    router.get('/auth/tokens', [AuthController, 'listTokens'])
-    router.delete('/auth/tokens/:id', [AuthController, 'revokeToken'])
+  .get('/api/submissions/:id/download', [SubmissionsController, 'download'])
+  .as('submissions.download.public') // was 'submissions.download'
 
-    // LTI grade passback — protected, called internally after grading
-    router.post('/lti/grade', [LtiController, 'grade'])
+// ─────────────────────────────────────────────────────────────────────
+// SHARED ROUTE DEFINITIONS
+// Applied to both /api (session auth) and /api/v1 (HMAC signed).
+// Add new routes here — they will automatically appear in both APIs.
+// ─────────────────────────────────────────────────────────────────────
+function registerApiRoutes(prefix: string = '') {
+  // Auth — me + token management (no login/logout for external tools)
+  router.get('/auth/me', [AuthController, 'me'])
+  router.post('/auth/tokens', [AuthController, 'createToken'])
+  router.get('/auth/tokens', [AuthController, 'listTokens'])
+  router.delete('/auth/tokens/:id', [AuthController, 'revokeToken'])
 
-    // Submissions
-    router.get('/submissions/:id/result', [SubmissionsController, 'result'])
-    router.get('/submissions/:id/download-url', [SubmissionsController, 'downloadUrl'])
-    router.resource('submissions', SubmissionsController).apiOnly()
+  // OAuth client management — users manage their own API credentials
+  router.get('/oauth/clients', [OAuthController, 'listClients'])
+  router.post('/oauth/clients', [OAuthController, 'createClient'])
+  router.delete('/oauth/clients/:id', [OAuthController, 'revokeClient'])
 
-    // Assignments
-    router.get('/assignments/:id/offerings', [AssignmentsController, 'offerings'])
-    router.post('/assignments/:id/offerings', [AssignmentsController, 'createOffering'])
-    router.resource('assignments', AssignmentsController).apiOnly()
+  // LTI grade passback — called internally after grading completes
+  router.post('/lti/grade', [LtiController, 'grade'])
 
-    // Courses
-    router.get('/courses/:id/sections', [CoursesController, 'sections'])
-    router.post('/courses/:id/sections', [CoursesController, 'createSection'])
-    router.get('/courses/:id/sections/:sectionId/enrollments', [CoursesController, 'enrollments'])
-    router.post('/courses/:id/sections/:sectionId/enroll', [CoursesController, 'enroll'])
-    router.delete('/courses/:id/sections/:sectionId/enroll/:userId', [
-      CoursesController,
-      'unenroll',
-    ])
-    router.resource('courses', CoursesController).apiOnly()
+  // Submissions
+  router.get('/submissions/:id/result', [SubmissionsController, 'result'])
+  router.get('/submissions/:id/download-url', [SubmissionsController, 'downloadUrl'])
+  router.resource('submissions', SubmissionsController).apiOnly().as(`${prefix}submissions`)
 
-    // Admin Routes
-    router
-      .group(() => {
-        router.get('/users', [UsersController, 'index'])
-        router.patch('/users/:id/role', [UsersController, 'updateRole'])
-        router.get('/terms', [TermsController, 'index'])
-        router.post('/terms', [TermsController, 'store'])
-      })
-      .use(middleware.admin())
+  // Assignments
+  router.get('/assignments/:id/offerings', [AssignmentsController, 'offerings'])
+  router.post('/assignments/:id/offerings', [AssignmentsController, 'createOffering'])
+  router.resource('assignments', AssignmentsController).apiOnly().as(`${prefix}assignments`)
 
-    // Shared references (instructors and admins)
-    router.get('/submission-policies', [SubmissionPoliciesController, 'index'])
-  })
+  // Courses
+  router.get('/courses/:id/sections', [CoursesController, 'sections'])
+  router.post('/courses/:id/sections', [CoursesController, 'createSection'])
+  router.get('/courses/:id/sections/:sectionId/enrollments', [CoursesController, 'enrollments'])
+  router.post('/courses/:id/sections/:sectionId/enroll', [CoursesController, 'enroll'])
+  router.delete('/courses/:id/sections/:sectionId/enroll/:userId', [CoursesController, 'unenroll'])
+  router.resource('courses', CoursesController).apiOnly().as(`${prefix}courses`)
+
+  // Submission policies — shared reference data
+  router.get('/submission-policies', [SubmissionPoliciesController, 'index'])
+
+  // Admin routes — additionally gated by admin middleware within both APIs
+  router
+    .group(() => {
+      router.get('/users', [UsersController, 'index'])
+      router.patch('/users/:id/role', [UsersController, 'updateRole'])
+      router.get('/terms', [TermsController, 'index'])
+      router.post('/terms', [TermsController, 'store'])
+    })
+    .use(middleware.admin())
+}
+
+// ── Session API — Nuxt frontend (/api) ───────────────────────────────
+// Authenticated via AdonisJS Bearer token (login → token → requests)
+router
+  .group(() => registerApiRoutes('api.'))
   .prefix('/api')
   .use(middleware.auth({ guards: ['api'] }))
+// ── Programmatic API (/api/v1) ────────────────────────────────────────
+// Authenticated via HMAC-SHA256 request signing using OAuth client credentials.
+// For any user or system that wants to interact with the backend programmatically
+// without going through the Nuxt frontend — including students submitting from
+// their IDE, instructors automating course and assignment setup, scripts,
+// external integrations, and grading workers.
+//
+// Generate credentials at: POST /api/oauth/clients (requires existing session)
+// Signing instructions: see app/auth/guards/hmac_guard.ts
+router
+  .group(() => registerApiRoutes('v1.'))
+  .prefix('/api/v1')
+  .use(middleware.auth({ guards: ['hmac'] }))
