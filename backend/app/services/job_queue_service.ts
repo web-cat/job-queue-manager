@@ -106,14 +106,16 @@ export default class JobQueueService {
         body: formData,
       })
 
-      const responseData = (await response.json()) as { data: { job_id: number } }
-      const jobId = responseData.data.job_id
-
       if (!response.ok) {
-        console.error(`[JobQueueService] API rejected job. Status: ${response.status}`)
+        const errorBody = await response.text()
+        console.error(
+          `[JobQueueService] API rejected job. Status: ${response.status}. Body: ${errorBody}`
+        )
         return { success: false }
       }
 
+      const responseData = (await response.json()) as { data: { job_id: number } }
+      const jobId = responseData.data.job_id
       console.info(
         `[JobQueueService] Submitted submission ${submissionId} to execution API as job ${jobId}`
       )
