@@ -140,7 +140,7 @@ test.group('Submissions — result', () => {
 })
 
 test.group('Submissions — webhook', () => {
-  test('accepts webhook payload and returns received', async ({ client }) => {
+  test('accepts webhook payload and returns received', async ({ client, assert }) => {
     const { token } = await loginAsUser(client)
     const userId = await getUserId(client, token)
     const submissionId = await createSubmission(userId)
@@ -154,6 +154,9 @@ test.group('Submissions — webhook', () => {
 
     response.assertStatus(200)
     response.assertBodyContains({ received: true })
+
+    const updatedSubmission = await db.from('submission').where('id', submissionId).first()
+    assert.equal(updatedSubmission?.status, 'pending')
   })
 
   test('returns 400 for invalid webhook payload shape', async ({ client, assert }) => {
