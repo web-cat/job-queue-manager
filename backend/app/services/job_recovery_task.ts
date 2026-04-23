@@ -25,7 +25,7 @@ export default class JobRecoveryTask {
 
     for (const submission of stuckSubmissions) {
       if (!submission.externalJobId) {
-        console.warn(
+        logger.warn(
           `[Recovery] Skipping submission ${submission.id} because it has no external job ID`
         )
         continue
