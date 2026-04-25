@@ -31,15 +31,14 @@ export default class AdminMiddleware {
   async handle({ auth, response }: HttpContext, next: NextFn) {
     const user = auth.getUserOrFail()
 
-    // Check admin via globalRole relationship
-    if (!(user as any).$loaded('globalRole')) {
-      await user.load((loader) => loader.load('globalRole'))
+    // Load globalRole if not already preloaded
+    if (!user.$preloaded.globalRole) {
+      await (user as any).load('globalRole')
     }
 
     if (!user.globalRole?.canManageAllCourses) {
       return response.forbidden({ message: 'Admin access required' })
     }
-
     return next()
   }
 }

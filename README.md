@@ -165,6 +165,7 @@ You need multiple terminals open when developing locally.
 
 ```bash
 kubectl port-forward svc/postgres 5432:5432 -n 22012-job-queue-manager
+kubectl port-forward svc/postgres 5432:5432 -n 22012-job-queue-manager --address 127.0.0.1 &
 ```
 
 **Terminal 2 — MinIO tunnel (required for submission file uploads):**

@@ -6,9 +6,9 @@ export default class LogRequestMiddleware {
   async handle({ request, response }: HttpContext, next: NextFn) {
     const method = request.method()
     const url = request.url()
-    
+
     logger.info(`--> [INCOMING] ${method} ${url}`)
-    
+
     try {
       await next()
       logger.info(`<-- [COMPLETED] [${response.getStatus()}] ${method} ${url}`)
