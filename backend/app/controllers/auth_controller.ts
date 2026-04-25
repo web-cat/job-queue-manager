@@ -97,7 +97,7 @@ export default class AuthController {
   async logout({ auth, response }: HttpContext) {
     const user = auth.getUserOrFail()
     // Get the current token from the auth guard's internal state
-    const token = (auth as any).currentAccessToken
+    const token = (auth.user as any)?.currentAccessToken
     if (token) {
       await User.accessTokens.delete(user, token.identifier)
     }

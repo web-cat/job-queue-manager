@@ -147,4 +147,4 @@ router
 router
   .group(() => registerApiRoutes('v1.'))
   .prefix('/api/v1')
-  .use(middleware.auth({ guards: ['hmac'] }))
+  .use(middleware.oauthSignature())
