@@ -87,7 +87,7 @@ export default class JobQueueService {
     // Append the standard text fields
     formData.append('submission_id', submissionId.toString())
     formData.append('priority', priority.toString())
-    formData.append('callback_url', `${env.get('INTERNAL_APP_URL')}/api/submissions/webhook`)
+    formData.append('callback_url', `${env.get('FRONTEND_URL')}/api/submissions/webhook`)
     formData.append('docker_image_tag', imageTag.toString())
 
     try {
@@ -97,11 +97,14 @@ export default class JobQueueService {
       formData.append('files', fileBlob, `submission_${submissionId}.zip`)
 
       // Send the heavy request to the other team
-      const response = await fetch(`${this.baseUrl}/api/v1/jobs`, {
+      const response = await fetch(`${this.baseUrl}/jobs`, {
         method: 'POST',
         // Note: Do NOT set the 'Content-Type' header manually when using FormData.
         // fetch will automatically set it to 'multipart/form-data' with the correct boundary.
         body: formData,
+        headers: {
+          'X-API-KEY': `${env.get('JOB_QUEUE_API_KEY')}`,
+        },
       })
 
       if (!response.ok) {
@@ -140,7 +143,7 @@ export default class JobQueueService {
   async checkStatus(jobId: number): Promise<any | null> {
     console.info(`[JobQueueService] Checking status for job ${jobId} via execution API`)
     try {
-      const response = await fetch(`${this.baseUrl}/api/v1/jobs/${jobId}`)
+      const response = await fetch(`${this.baseUrl}/jobs/${jobId}`)
       if (!response.ok) return null
       return await response.json()
     } catch (error) {
@@ -154,7 +157,7 @@ export default class JobQueueService {
   async downloadPayload(payloadUrl: string): Promise<Buffer | null> {
     try {
       // 1. Fetch the zip file from their cluster
-      // Note: payloadUrl is likely a relative path like "/api/v1/jobs/142/payload"
+      // Note: payloadUrl is likely a relative path like "/jobs/142/payload"
       const response = await fetch(`${this.baseUrl}${payloadUrl}`)
 
       if (!response.ok) {

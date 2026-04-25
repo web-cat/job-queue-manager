@@ -147,7 +147,7 @@ export default class CoursesController {
    */
   async createSection({ bouncer, params, request, response }: HttpContext) {
     const course = await Course.findOrFail(params.id)
-    await bouncer.with(CoursePolicy).authorize('createSection', course)
+    await bouncer.with(CoursePolicy).authorize('createSection')
     const data = await request.validateUsing(createSectionValidator)
 
     const section = await Section.create({

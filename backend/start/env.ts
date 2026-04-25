@@ -29,8 +29,6 @@ export default await Env.create(new URL('../', import.meta.url), {
   DB_PASSWORD: Env.schema.string.optional(),
   DB_DATABASE: Env.schema.string(),
 
-  INTERNAL_APP_URL: Env.schema.string(),
-
   /*
   |----------------------------------------------------------
   | Variables for VT CAS authentication

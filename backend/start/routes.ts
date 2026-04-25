@@ -72,7 +72,9 @@ router.post('/api/lti/launch', [LtiController, 'launch'])
 router.post('/api/submissions/webhook', [SubmissionsController, 'webhook'])
 
 // ── Public download route (protected by signed URL) ──────────────────
-router.get('/api/submissions/:id/download', [SubmissionsController, 'download']).as('submissions.download')
+router
+  .get('/api/submissions/:id/download', [SubmissionsController, 'download'])
+  .as('submissions.download')
 
 // ── Protected routes (API token required) ────────────────────────────
 router
