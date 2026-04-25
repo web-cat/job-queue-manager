@@ -74,11 +74,6 @@ router
   .get('/api/submissions/:id/download', [SubmissionsController, 'download'])
   .as('submissions.download')
 
-// ── Protected routes (API token required) ────────────────────────────
-router
-  .get('/api/submissions/:id/download', [SubmissionsController, 'download'])
-  .as('submissions.download.public') // was 'submissions.download'
-
 // ─────────────────────────────────────────────────────────────────────
 // SHARED ROUTE DEFINITIONS
 // Applied to both /api (session auth) and /api/v1 (HMAC signed).
@@ -102,6 +97,9 @@ function registerApiRoutes(prefix: string = '') {
   // Submissions
   router.get('/submissions/:id/result', [SubmissionsController, 'result'])
   router.get('/submissions/:id/download-url', [SubmissionsController, 'downloadUrl'])
+  router
+    .get('/submissions/:id/download', [SubmissionsController, 'download'])
+    .as(`${prefix}submissions.download`)
   router.resource('submissions', SubmissionsController).apiOnly().as(`${prefix}submissions`)
 
   // Assignments

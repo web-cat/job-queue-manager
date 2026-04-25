@@ -87,14 +87,16 @@ export default class SubmissionsController {
 
   /**
    * GET /api/submissions
-   * List submissions for the authenticated user, paginated.
+   * List submissions visible to the authenticated user, paginated.
+   * Admins see all submissions, instructors see their courses' submissions,
+   * students see only their own submissions.
    */
-  async index({ auth, request, response }: HttpContext) {
-    const user = auth.getUserOrFail()
+  async index({ auth, bouncer, request, response }: HttpContext) {
+    auth.getUserOrFail()
     const { page = 1, limit = 20, assignmentOfferingId, workoutId } = request.qs()
 
+    // Query all submissions matching the filters
     const query = Submission.query()
-      .where('user_id', user.id)
       .preload('assignmentOffering', (q) => q.preload('assignment'))
       .orderBy('created_at', 'desc')
 
@@ -106,9 +108,29 @@ export default class SubmissionsController {
       query.where('workout_id', workoutId)
     }
 
-    const submissions = await query.paginate(page, limit)
+    const allSubmissions = await query.paginate(page, limit)
 
-    return response.ok(submissions)
+    // Filter by authorization — only include submissions the user can view
+    const authorizedSubmissions = []
+    for (const submission of allSubmissions.all()) {
+      try {
+        await bouncer.with(SubmissionPolicy).authorize('view', submission)
+        authorizedSubmissions.push(submission)
+      } catch {
+        // User not authorized to view this submission, skip it
+      }
+    }
+
+    // Return results with pagination metadata
+    return response.ok({
+      data: authorizedSubmissions,
+      meta: {
+        total: allSubmissions.total,
+        per_page: allSubmissions.perPage,
+        current_page: allSubmissions.currentPage,
+        last_page: allSubmissions.lastPage,
+      },
+    })
   }
 
   /**

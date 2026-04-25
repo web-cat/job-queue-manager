@@ -165,7 +165,7 @@ export default class CasController {
       // Revoke the local API token if user is authenticated
       const user = auth.user
       if (user) {
-        const token = user.currentAccessToken
+        const token = (user as any).currentAccessToken
         if (token) {
           await User.accessTokens.delete(user, token.identifier)
         }

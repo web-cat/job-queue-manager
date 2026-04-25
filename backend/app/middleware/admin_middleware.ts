@@ -32,7 +32,9 @@ export default class AdminMiddleware {
     const user = auth.getUserOrFail()
 
     // Check admin via globalRole relationship
-    await user.load('globalRole')
+    if (!(user as any).$loaded('globalRole')) {
+      await user.load((loader) => loader.load('globalRole'))
+    }
 
     if (!user.globalRole?.canManageAllCourses) {
       return response.forbidden({ message: 'Admin access required' })
