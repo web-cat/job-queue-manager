@@ -23,7 +23,7 @@ export default class CoursePolicy extends BasePolicy {
     return !!enrollment
   }
 
-  async createSection(user: User, course: Course) {
+  async createSection(user: User) {
     return user.globalRoleId === 1
   }
 

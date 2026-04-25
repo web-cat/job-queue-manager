@@ -48,10 +48,10 @@ export default await Env.create(new URL('../', import.meta.url), {
 
   /*
   |----------------------------------------------------------
-  | Variables for job queue integration with other team
+  | Variable for job queue integration with other team
   |
   | Optional — stubbed until other team confirms their API.
-  | Fill these in when the other team provides their endpoint.
+  | Fill this in when the other team provides their endpoint.
   |----------------------------------------------------------
   */
   JOB_QUEUE_API_URL: Env.schema.string.optional(),
