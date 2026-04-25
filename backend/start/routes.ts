@@ -97,9 +97,9 @@ function registerApiRoutes(prefix: string = '') {
   // Submissions
   router.get('/submissions/:id/result', [SubmissionsController, 'result'])
   router.get('/submissions/:id/download-url', [SubmissionsController, 'downloadUrl'])
-  router
-    .get('/submissions/:id/download', [SubmissionsController, 'download'])
-    .as(`${prefix}submissions.download`)
+  // router
+  //   .get('/submissions/:id/download', [SubmissionsController, 'download'])
+  //   .as(`${prefix}submissions.download`)
   router.resource('submissions', SubmissionsController).apiOnly().as(`${prefix}submissions`)
 
   // Assignments
