@@ -291,17 +291,32 @@ export default class SubmissionsController {
 
   /**
    * GET /api/submissions/:id/download
-   * Public route protected by signed URL. Streams the file securely.
+   * Supports two access modes:
+   * 1) Signed URL access (public, short-lived)
+   * 2) Authenticated access (api/hmac guard + bouncer policy)
    */
-  async download({ request, params, response }: HttpContext) {
-    if (!request.hasValidSignature()) {
-      return response.unauthorized({ message: 'Invalid or expired download link' })
+  async download({ auth, bouncer, request, params, response }: HttpContext) {
+    const submissionId = Number(params.id)
+    let authorized = request.hasValidSignature()
+
+    if (!authorized) {
+      try {
+        await auth.authenticateUsing(['api', 'hmac'])
+        const submission = await Submission.query().where('id', submissionId).firstOrFail()
+        await bouncer.with(SubmissionPolicy).authorize('view', submission)
+        authorized = true
+      } catch {
+        return response.unauthorized({ message: 'Invalid/expired link or unauthorized request' })
+      }
+    }
+
+    if (!authorized) {
+      return response.unauthorized({ message: 'Invalid/expired link or unauthorized request' })
     }
 
     try {
-      const { fileBuffer, filename } = await this.submissionService.getSubmissionDownload(
-        Number(params.id)
-      )
+      const { fileBuffer, filename } =
+        await this.submissionService.getSubmissionDownload(submissionId)
 
       response.header('Content-Disposition', `attachment; filename="${filename}"`)
       response.header('Content-Type', 'application/zip')
