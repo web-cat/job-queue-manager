@@ -87,14 +87,16 @@ export default class SubmissionsController {
 
   /**
    * GET /api/submissions
-   * List submissions for the authenticated user, paginated.
+   * List submissions visible to the authenticated user, paginated.
+   * Admins see all submissions, instructors see their courses' submissions,
+   * students see only their own submissions.
    */
-  async index({ auth, request, response }: HttpContext) {
-    const user = auth.getUserOrFail()
+  async index({ auth, bouncer, request, response }: HttpContext) {
+    auth.getUserOrFail()
     const { page = 1, limit = 20, assignmentOfferingId, workoutId } = request.qs()
 
+    // Query all submissions matching the filters
     const query = Submission.query()
-      .where('user_id', user.id)
       .preload('assignmentOffering', (q) => q.preload('assignment'))
       .orderBy('created_at', 'desc')
 
@@ -106,9 +108,29 @@ export default class SubmissionsController {
       query.where('workout_id', workoutId)
     }
 
-    const submissions = await query.paginate(page, limit)
+    const allSubmissions = await query.paginate(page, limit)
 
-    return response.ok(submissions)
+    // Filter by authorization — only include submissions the user can view
+    const authorizedSubmissions = []
+    for (const submission of allSubmissions.all()) {
+      try {
+        await bouncer.with(SubmissionPolicy).authorize('view', submission)
+        authorizedSubmissions.push(submission)
+      } catch {
+        // User not authorized to view this submission, skip it
+      }
+    }
+
+    // Return results with pagination metadata
+    return response.ok({
+      data: authorizedSubmissions,
+      meta: {
+        total: allSubmissions.total,
+        per_page: allSubmissions.perPage,
+        current_page: allSubmissions.currentPage,
+        last_page: allSubmissions.lastPage,
+      },
+    })
   }
 
   /**
@@ -269,17 +291,32 @@ export default class SubmissionsController {
 
   /**
    * GET /api/submissions/:id/download
-   * Public route protected by signed URL. Streams the file securely.
+   * Supports two access modes:
+   * 1) Signed URL access (public, short-lived)
+   * 2) Authenticated access (api/hmac guard + bouncer policy)
    */
-  async download({ request, params, response }: HttpContext) {
-    if (!request.hasValidSignature()) {
-      return response.unauthorized({ message: 'Invalid or expired download link' })
+  async download({ auth, bouncer, request, params, response }: HttpContext) {
+    const submissionId = Number(params.id)
+    let authorized = request.hasValidSignature()
+
+    if (!authorized) {
+      try {
+        await auth.authenticateUsing(['api', 'hmac'])
+        const submission = await Submission.query().where('id', submissionId).firstOrFail()
+        await bouncer.with(SubmissionPolicy).authorize('view', submission)
+        authorized = true
+      } catch {
+        return response.unauthorized({ message: 'Invalid/expired link or unauthorized request' })
+      }
+    }
+
+    if (!authorized) {
+      return response.unauthorized({ message: 'Invalid/expired link or unauthorized request' })
     }
 
     try {
-      const { fileBuffer, filename } = await this.submissionService.getSubmissionDownload(
-        Number(params.id)
-      )
+      const { fileBuffer, filename } =
+        await this.submissionService.getSubmissionDownload(submissionId)
 
       response.header('Content-Disposition', `attachment; filename="${filename}"`)
       response.header('Content-Type', 'application/zip')

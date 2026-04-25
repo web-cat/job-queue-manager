@@ -1,6 +1,7 @@
 import { defineConfig } from '@adonisjs/auth'
 import { tokensGuard, tokensUserProvider } from '@adonisjs/auth/access_tokens'
 import type { InferAuthenticators, InferAuthEvents, Authenticators } from '@adonisjs/auth/types'
+import { HmacGuard } from '#auth/guards/hmac_guard'
 
 const authConfig = defineConfig({
   default: 'api',
@@ -8,18 +9,15 @@ const authConfig = defineConfig({
     api: tokensGuard({
       provider: tokensUserProvider({
         tokens: 'accessTokens',
-        model: () => import('#models/user')
+        model: () => import('#models/user'),
       }),
     }),
+    hmac: (ctx) => new HmacGuard(ctx),
   },
 })
 
 export default authConfig
 
-/**
- * Inferring types from the configured auth
- * guards.
- */
 declare module '@adonisjs/auth/types' {
   export interface Authenticators extends InferAuthenticators<typeof authConfig> {}
 }
