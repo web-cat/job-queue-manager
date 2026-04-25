@@ -69,7 +69,12 @@ router.get('/api/lti/jwks', [LtiController, 'jwks'])
 // TODO: Add IP restriction middleware once partner team confirms their IPs
 router.post('/api/submissions/webhook', [SubmissionsController, 'webhook'])
 
-// ── Public download route (signed MinIO URL) ──────────────────────────
+// ── Public download route (protected by signed URL) ──────────────────
+router
+  .get('/api/submissions/:id/download', [SubmissionsController, 'download'])
+  .as('submissions.download')
+
+// ── Protected routes (API token required) ────────────────────────────
 router
   .get('/api/submissions/:id/download', [SubmissionsController, 'download'])
   .as('submissions.download.public') // was 'submissions.download'

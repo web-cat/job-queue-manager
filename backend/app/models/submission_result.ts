@@ -44,6 +44,27 @@ export default class SubmissionResult extends BaseModel {
   @column()
   declare commentFormat: number | null
 
+  @column()
+  declare runtimeMs: number | null
+
+  @column()
+  declare exitCode: number | null
+
+  @column()
+  declare testOutput: string | null
+
+  @column()
+  declare artifactFilePath: string | null
+
+  @column.dateTime()
+  declare queuedAt: DateTime | null
+
+  @column.dateTime()
+  declare startedAt: DateTime | null
+
+  @column.dateTime()
+  declare completedAt: DateTime | null
+
   @column.dateTime()
   declare lastUpdated: DateTime | null
 

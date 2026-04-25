@@ -72,11 +72,13 @@ export default class CoursesController {
       })
       .preload('organization')
       .preload('sections', (sectionsQuery) => {
-        sectionsQuery.whereHas('enrollments', (enrollmentsQuery) => {
-          enrollmentsQuery.where('user_id', user.id)
-        }).preload('enrollments', (eq) => {
-          eq.where('user_id', user.id).preload('courseRole')
-        })
+        sectionsQuery
+          .whereHas('enrollments', (enrollmentsQuery) => {
+            enrollmentsQuery.where('user_id', user.id)
+          })
+          .preload('enrollments', (eq) => {
+            eq.where('user_id', user.id).preload('courseRole')
+          })
       })
       .orderBy('name', 'asc')
       .paginate(page, limit)
@@ -147,7 +149,7 @@ export default class CoursesController {
    */
   async createSection({ bouncer, params, request, response }: HttpContext) {
     const course = await Course.findOrFail(params.id)
-    await bouncer.with(CoursePolicy).authorize('createSection', course)
+    await bouncer.with(CoursePolicy).authorize('createSection')
     const data = await request.validateUsing(createSectionValidator)
 
     const section = await Section.create({

@@ -54,6 +54,12 @@ export default class User extends compose(BaseModel, AuthFinder) {
   @column({ serializeAs: null })
   declare encryptedPassword: string
 
+  @column({ columnName: 'api_client_id' })
+  declare apiClientId: string | null
+
+  @column({ columnName: 'api_client_secret_hash', serializeAs: null })
+  declare apiClientSecretHash: string | null
+
   @column()
   declare firstName: string | null
 

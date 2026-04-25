@@ -11,12 +11,11 @@
 // OPERATION ORDER in store():
 //   1. Validate file presence and type
 //   2. Create submission_result stub (FK required by submission)
-//   3. Build objectKey from submission metadata
-//   4. Create submission record with filePath set to objectKey
-//   5. Upload file to MinIO
-//   6. On upload failure: delete submission + submissionResult, return 500
-//   7. Create enqueued_job record
-//   8. Return created records
+//   3. Create submission record with filePath set to objectKey
+//   4. Build objectKey from submission metadata and upload file to MinIO
+//   5. Update submission with final file path
+//   6. Enqueue with other team
+//   7. Update submission status to pending
 //
 // DEPENDENCIES: submission.ts, submission_result.ts, job_queue_service.ts,
 //   object_storage_service.ts
@@ -36,15 +35,12 @@
 
 // STATUS: complete [job queue enqueue and webhook handling pending other team API]
 
-import { DateTime } from 'luxon'
 import type { HttpContext } from '@adonisjs/core/http'
+import { inject } from '@adonisjs/core'
+import router from '@adonisjs/core/services/router'
 import vine from '@vinejs/vine'
 import Submission from '#models/submission'
-import SubmissionResult from '#models/submission_result'
-import JobQueueService from '#services/job_queue_service'
-import { uploadFileToObjectStorage, getFileStreamFromObjectStorage } from '#services/object_storage_service'
-import env from '#start/env'
-import router from '@adonisjs/core/services/router'
+import SubmissionService from '#services/submission_service'
 import SubmissionPolicy from '#policies/submission_policy'
 
 // ── Validators ───────────────────────────────────────────────────────
@@ -57,10 +53,37 @@ const createSubmissionValidator = vine.compile(
   })
 )
 
+const webhookPayloadValidator = vine.compile(
+  vine.object({
+    data: vine.object({
+      submission_id: vine.number().positive(),
+      status: vine.string(),
+      submitted_at: vine.string().optional(),
+      started_at: vine.string().optional(),
+      completed_at: vine.string().optional(),
+      retry_count: vine.number().optional(),
+      result: vine
+        .object({
+          correctness_score: vine.number().optional(),
+          tool_score: vine.number().optional(),
+          comments: vine.string().optional(),
+          comment_format: vine.string().optional(),
+          runtime_ms: vine.number().optional(),
+          exit_code: vine.number().optional(),
+          test_output: vine.string().optional(),
+          has_payload: vine.boolean().optional(),
+          payload_url: vine.string().optional(),
+        })
+        .optional(),
+    }),
+  })
+)
+
 // ── Controller ───────────────────────────────────────────────────────
 
+@inject()
 export default class SubmissionsController {
-  private jobQueueService = new JobQueueService()
+  constructor(private submissionService: SubmissionService) {}
 
   /**
    * GET /api/submissions
@@ -96,7 +119,6 @@ export default class SubmissionsController {
     const submission = await Submission.query()
       .where('id', params.id)
       .preload('assignmentOffering', (q) => q.preload('assignment'))
-      .preload('enqueuedJob')
       .firstOrFail()
 
     await bouncer.with(SubmissionPolicy).authorize('view', submission)
@@ -118,9 +140,11 @@ export default class SubmissionsController {
     const user = auth.getUserOrFail()
     const data = await request.validateUsing(createSubmissionValidator)
 
-    await bouncer.with(SubmissionPolicy).authorize('create', data.workoutId, data.assignmentOfferingId)
+    await bouncer
+      .with(SubmissionPolicy)
+      .authorize('create', data.workoutId, data.assignmentOfferingId)
 
-    // ── Step 1: Validate uploaded file ───────────────────────────
+    // Validate uploaded file
     const submissionArchive = request.file('submission_zip', {
       size: '100mb',
       extnames: ['zip'],
@@ -143,65 +167,24 @@ export default class SubmissionsController {
       })
     }
 
-    // ── Step 2: Create submission_result stub (FK required) ───────
-    const submissionResult = await SubmissionResult.create({
-      correctnessScore: 0,
-    })
-
-    // ── Step 3: Create submission record ─────────────────────────
-    // filePath is set to a predictable key format — will be updated
-    // to the final objectKey after we know the submission ID
-    const submission = await Submission.create({
-      userId: user.id,
-      workoutId: data.workoutId,
-      assignmentOfferingId: data.assignmentOfferingId ?? null,
-      submissionResultId: submissionResult.id,
-      isSubmissionForGrading: data.isSubmissionForGrading ?? true,
-      feedbackReady: false,
-      partnerLink: false,
-      submitTime: DateTime.now(),
-      filePath: null, // set after upload below
-    })
-
-    // ── Step 4: Build object key and upload to MinIO ──────────────
-    const objectKey = `submissions/${submission.id}/input/${submissionArchive.clientName}`
-
     try {
-      await uploadFileToObjectStorage(
-        env.get('S3_BUCKET'),
-        objectKey,
-        submissionArchive.tmpPath,
-        submissionArchive.type || 'application/zip'
+      // Delegate all business logic to the service
+      const { submission, archivePath } = await this.submissionService.processSubmission(
+        user.id,
+        data,
+        submissionArchive
       )
-    } catch (error) {
-      // Clean up DB records if upload fails
-      await submission.delete()
-      await submissionResult.delete()
 
+      return response.created({
+        submission,
+        archivePath,
+      })
+    } catch (error) {
       return response.internalServerError({
-        message: 'Failed to upload submission archive',
+        message: 'Failed to process submission',
         error: error instanceof Error ? error.message : 'Unknown upload error',
       })
     }
-
-    // ── Step 5: Update submission with final file path ────────────
-    await submission.merge({ filePath: objectKey }).save()
-
-    // ── Step 6: Create local enqueued_job record ──────────────────
-    const enqueuedJob = await this.jobQueueService.createLocalRecord(submission)
-
-    // ── Step 7: Enqueue with other team (stubbed) ─────────────────
-    // TODO: Uncomment once other team confirms their endpoint URL and payload format
-    // const { externalJobId, success } = await this.jobQueueService.enqueue(submission)
-    // if (!success) {
-    //   return response.serviceUnavailable({ message: 'Job queue unavailable' })
-    // }
-
-    return response.created({
-      submission,
-      enqueuedJob,
-      archivePath: objectKey,
-    })
   }
 
   /**
@@ -213,9 +196,7 @@ export default class SubmissionsController {
    * whether they write to this column or to submission_result.correctness_score.
    */
   async result({ bouncer, params, response }: HttpContext) {
-    const submission = await Submission.query()
-      .where('id', params.id)
-      .firstOrFail()
+    const submission = await Submission.query().where('id', params.id).firstOrFail()
 
     await bouncer.with(SubmissionPolicy).authorize('view', submission)
 
@@ -226,7 +207,6 @@ export default class SubmissionsController {
     return response.ok({
       ready: true,
       submissionId: submission.id,
-      score: submission.score,
     })
   }
 
@@ -258,17 +238,11 @@ export default class SubmissionsController {
    * Receives result callbacks from the other team when grading completes.
    * Public route — no auth token required.
    *
-   * TODO: Implement once other team confirms webhook payload format.
-   * Expected payload (unconfirmed):
-   *   { submissionId, score, feedbackReady, testResults: [...] }
-   * On receipt: update submission.score, submission.feedbackReady = true,
-   *   update submission_result.correctnessScore with actual score.
-   *
    * SECURITY: Should be IP restricted to other team's cluster IPs in production.
    */
   async webhook({ request, response }: HttpContext) {
-    const payload = request.body()
-    await this.jobQueueService.handleWebhook(payload)
+    const payload = await request.validateUsing(webhookPayloadValidator)
+    await this.submissionService.handleWebhook(payload)
     return response.ok({ received: true })
   }
 
@@ -277,9 +251,7 @@ export default class SubmissionsController {
    * Generates a signed, short-lived URL for downloading the submission.
    */
   async downloadUrl({ bouncer, params, response }: HttpContext) {
-    const submission = await Submission.query()
-      .where('id', params.id)
-      .firstOrFail()
+    const submission = await Submission.query().where('id', params.id).firstOrFail()
 
     await bouncer.with(SubmissionPolicy).authorize('view', submission)
 
@@ -304,21 +276,20 @@ export default class SubmissionsController {
       return response.unauthorized({ message: 'Invalid or expired download link' })
     }
 
-    const submission = await Submission.findOrFail(params.id)
-
-    if (!submission.filePath) {
-      return response.notFound({ message: 'No file associated with this submission' })
-    }
-
     try {
-      const stream = await getFileStreamFromObjectStorage(env.get('S3_BUCKET'), submission.filePath)
-      const filename = submission.filePath.split('/').pop() || 'submission.zip'
-      
+      const { fileBuffer, filename } = await this.submissionService.getSubmissionDownload(
+        Number(params.id)
+      )
+
       response.header('Content-Disposition', `attachment; filename="${filename}"`)
       response.header('Content-Type', 'application/zip')
-      
-      return response.stream(stream as any)
+
+      return response.send(fileBuffer)
     } catch (error) {
+      if (error instanceof Error && error.message === 'No file associated with this submission') {
+        return response.notFound({ message: error.message })
+      }
+
       return response.internalServerError({ message: 'Failed to download file' })
     }
   }
