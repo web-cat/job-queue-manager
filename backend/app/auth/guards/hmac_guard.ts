@@ -33,7 +33,7 @@ setInterval(() => {
   for (const [nonce, ts] of usedNonces.entries()) {
     if (ts < cutoff) usedNonces.delete(nonce)
   }
-}, 60_000)
+}, 60_000).unref()
 
 export class HmacGuard implements GuardContract<User> {
   // Required by GuardContract
