@@ -4,10 +4,10 @@
     "rootDir": "./",
     "outDir": "./build",
     "paths": {
-    "#controllers/*": ["./app/controllers/*"],
-    "#models/*": ["./app/models/*"],
-    "#services/*": ["./app/services/*"],
-    "#auth/*": ["./app/auth/*"]
-  }
+      "#controllers/*": ["./app/controllers/*"],
+      "#models/*": ["./app/models/*"],
+      "#services/*": ["./app/services/*"],
+      "#auth/*": ["./app/auth/*"]
+    }
   }
 }
