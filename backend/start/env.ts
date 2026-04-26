@@ -45,6 +45,7 @@ export default await Env.create(new URL('../', import.meta.url), {
   CAS_BASE_URL: Env.schema.string.optional(),
   CAS_SERVICE_URL: Env.schema.string.optional(),
   FRONTEND_URL: Env.schema.string.optional(),
+  BACKEND_URL: Env.schema.string.optional(),
 
   /*
   |----------------------------------------------------------
