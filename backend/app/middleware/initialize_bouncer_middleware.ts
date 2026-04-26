@@ -16,7 +16,7 @@ export default class InitializeBouncerMiddleware {
      * We will pull the user from the HTTP context.
      */
     ctx.bouncer = new Bouncer(
-      () => ctx.auth.user || null,
+      () => ctx.auth.user ?? (ctx.auth.use('hmac' as any) as any).user ?? null,
       abilities,
       policies
     ).setContainerResolver(ctx.containerResolver)
