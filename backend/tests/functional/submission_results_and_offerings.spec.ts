@@ -124,7 +124,7 @@ test.group('Submissions — webhook full result payload', () => {
           correctness_score: 92,
           tool_score: 88,
           comments: '1 test case failed.',
-          comment_format: 0,
+          comment_format: '0',
           runtime_ms: 1500,
           exit_code: 0,
           test_output: 'TestAdd: PASS\nTestEdge: FAIL',
