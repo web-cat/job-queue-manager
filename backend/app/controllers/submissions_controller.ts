@@ -301,7 +301,7 @@ export default class SubmissionsController {
 
     if (!authorized) {
       try {
-        await auth.authenticateUsing(['api', 'hmac'])
+        await auth.authenticateUsing(['api'])
         const submission = await Submission.query().where('id', submissionId).firstOrFail()
         await bouncer.with(SubmissionPolicy).authorize('view', submission)
         authorized = true
