@@ -1,5 +1,8 @@
 import { test } from '@japa/runner'
 import { createHmac, createHash, randomUUID } from 'node:crypto'
+// Add to imports at top of oauth.spec.ts:
+import db from '@adonisjs/lucid/services/db'
+import User from '#models/user'
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -333,5 +336,100 @@ test.group('OAuth — HMAC signed requests (/api/v1)', () => {
       .header('x-signature', signature)
 
     response.assertStatus(401)
+  })
+})
+
+test.group('OAuth — HMAC role enforcement (/api/v1)', () => {
+  test('admin can create assignment via HMAC', async ({ client, assert }) => {
+    // Create admin user
+    const email = `admin_hmac_${Date.now()}@test.com`
+    await client.post('/api/auth/register').json({
+      firstName: 'Admin',
+      lastName: 'User',
+      email,
+      password: 'password123',
+    })
+    const user = await User.findByOrFail('email', email)
+    user.globalRoleId = 1
+    await user.save()
+    const login = await client.post('/api/auth/login').json({ email, password: 'password123' })
+    const token = login.body().token.token
+
+    // Create OAuth client for admin
+    const created = await client
+      .post('/api/oauth/clients')
+      .header('Authorization', `Bearer ${token}`)
+      .json({ name: 'admin-cli-test' })
+    const { client_id: clientId, client_secret: clientSecret } = created.body()
+
+    // Create submission policy
+    const [policy] = await db
+      .table('submission_policy')
+      .insert({
+        award_early_bonus: false,
+        deduct_late_penalty: false,
+        allow_partners: false,
+        auto_assign_partners: true,
+        deduct_excess_submission_penalty: false,
+        force_lti_clickthrough: false,
+        use_time_bank_days: false,
+        submisison_method: 0,
+      })
+      .returning('id')
+
+    // Sign request
+    const { timestamp, nonce, signature } = signRequest(
+      clientSecret,
+      'POST',
+      '/api/v1/assignments',
+      JSON.stringify({ name: 'HMAC Test Assignment', submissionPolicyId: policy.id })
+    )
+
+    const response = await client
+      .post('/api/v1/assignments')
+      .header('x-api-key', clientId)
+      .header('x-timestamp', timestamp)
+      .header('x-nonce', nonce)
+      .header('x-signature', signature)
+      .json({ name: 'HMAC Test Assignment', submissionPolicyId: policy.id })
+
+    response.assertStatus(201)
+    assert.exists(response.body().id)
+  })
+
+  test('student cannot create assignment via HMAC', async ({ client }) => {
+    // Register as student (globalRoleId: 3 by default)
+    const email = `student_hmac_${Date.now()}@test.com`
+    const register = await client.post('/api/auth/register').json({
+      firstName: 'Student',
+      lastName: 'User',
+      email,
+      password: 'password123',
+    })
+    const token = register.body().token.token
+
+    const created = await client
+      .post('/api/oauth/clients')
+      .header('Authorization', `Bearer ${token}`)
+      .json({ name: 'student-cli-test' })
+    const { client_id: clientId, client_secret: clientSecret } = created.body()
+
+    const body = JSON.stringify({ name: 'Should Fail', submissionPolicyId: 1 })
+    const { timestamp, nonce, signature } = signRequest(
+      clientSecret,
+      'POST',
+      '/api/v1/assignments',
+      body
+    )
+
+    const response = await client
+      .post('/api/v1/assignments')
+      .header('x-api-key', clientId)
+      .header('x-timestamp', timestamp)
+      .header('x-nonce', nonce)
+      .header('x-signature', signature)
+      .json({ name: 'Should Fail', submissionPolicyId: 1 })
+
+    response.assertStatus(403)
   })
 })

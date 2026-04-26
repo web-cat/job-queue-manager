@@ -106,6 +106,7 @@ function registerApiRoutes(prefix: string = '') {
   router.get('/assignments/:id/offerings', [AssignmentsController, 'offerings'])
   router.post('/assignments/:id/offerings', [AssignmentsController, 'createOffering'])
   router.resource('assignments', AssignmentsController).apiOnly().as(`${prefix}assignments`)
+  router.get('/assignments/:id/wait-time', [AssignmentsController, 'waitTime'])
 
   // Courses
   router.get('/courses/:id/sections', [CoursesController, 'sections'])

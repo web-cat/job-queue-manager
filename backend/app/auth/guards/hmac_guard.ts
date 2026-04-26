@@ -168,6 +168,7 @@ export class HmacGuard implements GuardContract<User> {
     // Set authenticated user
     this.user = client.user
     this.isAuthenticated = true
+    ;(this.#ctx as any).hmacUser = client.user
 
     return this.user
   }
