@@ -1,0 +1,337 @@
+import { test } from '@japa/runner'
+import { createHmac, createHash, randomUUID } from 'node:crypto'
+
+// ── Helpers ───────────────────────────────────────────────────────────
+
+async function loginAsUser(client: any) {
+  const email = `oauth_test_${Date.now()}@test.com`
+  const register = await client.post('/api/auth/register').json({
+    firstName: 'OAuth',
+    lastName: 'Test',
+    email,
+    password: 'password123',
+  })
+  return { token: register.body().token.token, email }
+}
+
+async function createOAuthClient(client: any, token: string, name?: string) {
+  const response = await client
+    .post('/api/oauth/clients')
+    .header('Authorization', `Bearer ${token}`)
+    .json({ name: name ?? `test-client-${Date.now()}` })
+  return response.body()
+}
+
+function signRequest(
+  clientSecret: string,
+  method: string,
+  path: string,
+  body: string = ''
+): { timestamp: string; nonce: string; signature: string } {
+  const timestamp = Date.now().toString()
+  const nonce = randomUUID()
+  const bodyHash = createHash('sha256').update(body).digest('hex')
+  const canonical = [method.toUpperCase(), path, timestamp, nonce, bodyHash].join('\n')
+  const signature = createHmac('sha256', clientSecret).update(canonical).digest('hex')
+  return { timestamp, nonce, signature }
+}
+
+// ── OAuth Client Management ───────────────────────────────────────────
+
+test.group('OAuth — createClient', () => {
+  test('creates a client and returns client_id and client_secret', async ({ client, assert }) => {
+    const { token } = await loginAsUser(client)
+
+    const response = await client
+      .post('/api/oauth/clients')
+      .header('Authorization', `Bearer ${token}`)
+      .json({ name: 'my-script' })
+
+    response.assertStatus(201)
+    const body = response.body()
+    assert.exists(body.client_id)
+    assert.exists(body.client_secret)
+    assert.equal(body.name, 'my-script')
+    assert.exists(body.warning)
+  })
+
+  test('returns 401 when not authenticated', async ({ client }) => {
+    const response = await client.post('/api/oauth/clients').json({ name: 'my-script' })
+
+    response.assertStatus(401)
+  })
+
+  test('returns 422 when name is missing', async ({ client }) => {
+    const { token } = await loginAsUser(client)
+
+    const response = await client
+      .post('/api/oauth/clients')
+      .header('Authorization', `Bearer ${token}`)
+      .json({})
+
+    response.assertStatus(422)
+  })
+})
+
+test.group('OAuth — listClients', () => {
+  test('returns list of clients for authenticated user', async ({ client, assert }) => {
+    const { token } = await loginAsUser(client)
+    await createOAuthClient(client, token, 'client-a')
+    await createOAuthClient(client, token, 'client-b')
+
+    const response = await client
+      .get('/api/oauth/clients')
+      .header('Authorization', `Bearer ${token}`)
+
+    response.assertStatus(200)
+    const body = response.body()
+    assert.isArray(body)
+    assert.isAtLeast(body.length, 2)
+  })
+
+  test('does not return client_secret in list', async ({ client, assert }) => {
+    const { token } = await loginAsUser(client)
+    await createOAuthClient(client, token)
+
+    const response = await client
+      .get('/api/oauth/clients')
+      .header('Authorization', `Bearer ${token}`)
+
+    response.assertStatus(200)
+    const body = response.body()
+    body.forEach((c: any) => {
+      assert.notExists(c.client_secret)
+      assert.notExists(c.client_secret_encrypted)
+    })
+  })
+
+  test('returns 401 when not authenticated', async ({ client }) => {
+    const response = await client.get('/api/oauth/clients')
+    response.assertStatus(401)
+  })
+})
+
+test.group('OAuth — revokeClient', () => {
+  test('revokes a client successfully', async ({ client, assert }) => {
+    const { token } = await loginAsUser(client)
+    const created = await createOAuthClient(client, token)
+
+    const response = await client
+      .delete(`/api/oauth/clients/${created.id}`)
+      .header('Authorization', `Bearer ${token}`)
+
+    response.assertStatus(200)
+    assert.equal(response.body().client_id, created.client_id)
+  })
+
+  test("returns 404 when revoking another user's client", async ({ client }) => {
+    // Create client as user A
+    const { token: tokenA } = await loginAsUser(client)
+    const created = await createOAuthClient(client, tokenA)
+
+    // Try to revoke as user B
+    const { token: tokenB } = await loginAsUser(client)
+    const response = await client
+      .delete(`/api/oauth/clients/${created.id}`)
+      .header('Authorization', `Bearer ${tokenB}`)
+
+    response.assertStatus(404)
+  })
+
+  test('returns 401 when not authenticated', async ({ client }) => {
+    const response = await client.delete('/api/oauth/clients/1')
+    response.assertStatus(401)
+  })
+})
+
+// ── Token Exchange ────────────────────────────────────────────────────
+
+test.group('OAuth — token exchange', () => {
+  test('exchanges valid credentials for a Bearer token', async ({ client, assert }) => {
+    const { token } = await loginAsUser(client)
+    const created = await createOAuthClient(client, token)
+
+    const response = await client.post('/api/oauth/token').json({
+      client_id: created.client_id,
+      client_secret: created.client_secret,
+      grant_type: 'client_credentials',
+    })
+
+    response.assertStatus(200)
+    const body = response.body()
+    assert.exists(body.access_token)
+    assert.equal(body.token_type, 'Bearer')
+    assert.equal(body.expires_in, 3600)
+  })
+
+  test('rejects invalid client_secret', async ({ client }) => {
+    const { token } = await loginAsUser(client)
+    const created = await createOAuthClient(client, token)
+
+    const response = await client.post('/api/oauth/token').json({
+      client_id: created.client_id,
+      client_secret: 'wrong_secret',
+      grant_type: 'client_credentials',
+    })
+
+    response.assertStatus(401)
+  })
+
+  test('rejects unknown client_id', async ({ client }) => {
+    const response = await client.post('/api/oauth/token').json({
+      client_id: '00000000-0000-0000-0000-000000000000', // valid UUID format, doesn't exist
+      client_secret: 'doesnt-matter',
+      grant_type: 'client_credentials',
+    })
+    response.assertStatus(401)
+  })
+
+  test('rejects wrong grant_type', async ({ client }) => {
+    const response = await client.post('/api/oauth/token').json({
+      client_id: 'some-id',
+      client_secret: 'some-secret',
+      grant_type: 'authorization_code',
+    })
+
+    response.assertStatus(400)
+  })
+
+  test('rejects revoked client', async ({ client }) => {
+    const { token } = await loginAsUser(client)
+    const created = await createOAuthClient(client, token)
+
+    // Revoke the client
+    await client
+      .delete(`/api/oauth/clients/${created.id}`)
+      .header('Authorization', `Bearer ${token}`)
+
+    // Try to exchange token
+    const response = await client.post('/api/oauth/token').json({
+      client_id: created.client_id,
+      client_secret: created.client_secret,
+      grant_type: 'client_credentials',
+    })
+
+    response.assertStatus(401)
+  })
+})
+
+// ── HMAC Signed API (/api/v1) ─────────────────────────────────────────
+
+test.group('OAuth — HMAC signed requests (/api/v1)', () => {
+  test('authenticates and returns assignments with valid HMAC signature', async ({
+    client,
+    assert,
+  }) => {
+    const { token } = await loginAsUser(client)
+    const created = await createOAuthClient(client, token)
+
+    const { timestamp, nonce, signature } = signRequest(
+      created.client_secret,
+      'GET',
+      '/api/v1/assignments'
+    )
+
+    const response = await client
+      .get('/api/v1/assignments')
+      .header('x-api-key', created.client_id)
+      .header('x-timestamp', timestamp)
+      .header('x-nonce', nonce)
+      .header('x-signature', signature)
+
+    response.assertStatus(200)
+    assert.exists(response.body().data)
+  })
+
+  test('rejects request with missing headers', async ({ client }) => {
+    const response = await client.get('/api/v1/assignments')
+    response.assertStatus(401)
+  })
+
+  test('rejects request with invalid signature', async ({ client }) => {
+    const { token } = await loginAsUser(client)
+    const created = await createOAuthClient(client, token)
+
+    const { timestamp, nonce } = signRequest(created.client_secret, 'GET', '/api/v1/assignments')
+
+    const response = await client
+      .get('/api/v1/assignments')
+      .header('x-api-key', created.client_id)
+      .header('x-timestamp', timestamp)
+      .header('x-nonce', nonce)
+      .header('x-signature', 'invalidsignature')
+
+    response.assertStatus(401)
+  })
+
+  test('rejects replayed nonce', async ({ client }) => {
+    const { token } = await loginAsUser(client)
+    const created = await createOAuthClient(client, token)
+
+    const { timestamp, nonce, signature } = signRequest(
+      created.client_secret,
+      'GET',
+      '/api/v1/assignments'
+    )
+
+    const headers = {
+      'x-api-key': created.client_id,
+      'x-timestamp': timestamp,
+      'x-nonce': nonce,
+      'x-signature': signature,
+    }
+
+    // First request — should succeed
+    await client.get('/api/v1/assignments').headers(headers)
+
+    // Second request with same nonce — should fail
+    const response = await client.get('/api/v1/assignments').headers(headers)
+    response.assertStatus(401)
+  })
+
+  test('rejects expired timestamp', async ({ client }) => {
+    const { token } = await loginAsUser(client)
+    const created = await createOAuthClient(client, token)
+
+    // Use a timestamp 10 minutes in the past
+    const oldTimestamp = (Date.now() - 10 * 60 * 1000).toString()
+    const nonce = randomUUID()
+    const bodyHash = createHash('sha256').update('').digest('hex')
+    const canonical = ['GET', '/api/v1/assignments', oldTimestamp, nonce, bodyHash].join('\n')
+    const signature = createHmac('sha256', created.client_secret).update(canonical).digest('hex')
+
+    const response = await client
+      .get('/api/v1/assignments')
+      .header('x-api-key', created.client_id)
+      .header('x-timestamp', oldTimestamp)
+      .header('x-nonce', nonce)
+      .header('x-signature', signature)
+
+    response.assertStatus(401)
+  })
+
+  test('rejects revoked client on HMAC request', async ({ client }) => {
+    const { token } = await loginAsUser(client)
+    const created = await createOAuthClient(client, token)
+
+    // Revoke the client
+    await client
+      .delete(`/api/oauth/clients/${created.id}`)
+      .header('Authorization', `Bearer ${token}`)
+
+    const { timestamp, nonce, signature } = signRequest(
+      created.client_secret,
+      'GET',
+      '/api/v1/assignments'
+    )
+
+    const response = await client
+      .get('/api/v1/assignments')
+      .header('x-api-key', created.client_id)
+      .header('x-timestamp', timestamp)
+      .header('x-nonce', nonce)
+      .header('x-signature', signature)
+
+    response.assertStatus(401)
+  })
+})

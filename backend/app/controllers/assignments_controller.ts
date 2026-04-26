@@ -21,12 +21,14 @@ import vine from '@vinejs/vine'
 import Assignment from '#models/assignment'
 import AssignmentOffering from '#models/assignment_offering'
 import { DateTime } from 'luxon'
+import AssignmentPolicy from '#policies/assignment_policy'
 
 // ── Validators ───────────────────────────────────────────────────────
 
 const createAssignmentValidator = vine.compile(
   vine.object({
     name: vine.string().trim().minLength(1),
+    dockerImageTag: vine.string().optional(),
     description: vine.string().optional(),
     submissionPolicyId: vine.number().positive(),
     isPublic: vine.boolean().optional(),
@@ -67,7 +69,7 @@ export default class AssignmentsController {
    */
   async index({ auth, request, response }: HttpContext) {
     const user = auth.getUserOrFail()
-    const { page = 1, limit = 20, isPublic } = request.qs()
+    const { page = 1, limit = 20, isPublic, sectionId } = request.qs()
 
     const query = Assignment.query()
       .where((q) => {
@@ -89,6 +91,12 @@ export default class AssignmentsController {
       query.where('is_public', isPublic === 'true')
     }
 
+    if (sectionId) {
+      query.whereHas('assignmentOfferings', (q) => {
+        q.where('course_offering_id', sectionId)
+      })
+    }
+
     const assignments = await query.paginate(page, limit)
 
     return response.ok(assignments)
@@ -98,7 +106,7 @@ export default class AssignmentsController {
    * GET /api/assignments/:id
    * Get a single assignment with its offerings
    */
-  async show({ params, response }: HttpContext) {
+  async show({ bouncer, params, response }: HttpContext) {
     const assignment = await Assignment.query()
       .where('id', params.id)
       .preload('submissionPolicy')
@@ -107,6 +115,8 @@ export default class AssignmentsController {
       })
       .firstOrFail()
 
+    await bouncer.with(AssignmentPolicy).authorize('view', assignment)
+
     return response.ok(assignment)
   }
 
@@ -114,8 +124,9 @@ export default class AssignmentsController {
    * POST /api/assignments
    * Create a new assignment
    */
-  async store({ auth, request, response }: HttpContext) {
+  async store({ auth, bouncer, request, response }: HttpContext) {
     const user = auth.getUserOrFail()
+    await bouncer.with(AssignmentPolicy).authorize('create')
     const data = await request.validateUsing(createAssignmentValidator)
 
     const assignment = await Assignment.create({
@@ -130,13 +141,12 @@ export default class AssignmentsController {
    * PATCH /api/assignments/:id
    * Update an assignment
    */
-  async update({ auth, params, request, response }: HttpContext) {
-    const user = auth.getUserOrFail()
-
+  async update({ bouncer, params, request, response }: HttpContext) {
     const assignment = await Assignment.query()
       .where('id', params.id)
-      .where('user_id', user.id)
       .firstOrFail()
+
+    await bouncer.with(AssignmentPolicy).authorize('update', assignment)
 
     const data = await request.validateUsing(updateAssignmentValidator)
     assignment.merge(data)
@@ -149,13 +159,12 @@ export default class AssignmentsController {
    * DELETE /api/assignments/:id
    * Delete an assignment
    */
-  async destroy({ auth, params, response }: HttpContext) {
-    const user = auth.getUserOrFail()
-
+  async destroy({ bouncer, params, response }: HttpContext) {
     const assignment = await Assignment.query()
       .where('id', params.id)
-      .where('user_id', user.id)
       .firstOrFail()
+
+    await bouncer.with(AssignmentPolicy).authorize('delete', assignment)
 
     await assignment.delete()
 
@@ -166,8 +175,9 @@ export default class AssignmentsController {
    * GET /api/assignments/:id/offerings
    * List all offerings for an assignment
    */
-  async offerings({ params, response }: HttpContext) {
+  async offerings({ bouncer, params, response }: HttpContext) {
     const assignment = await Assignment.findOrFail(params.id)
+    await bouncer.with(AssignmentPolicy).authorize('view', assignment)
 
     const offerings = await AssignmentOffering.query()
       .where('assignment_id', assignment.id)
@@ -181,9 +191,11 @@ export default class AssignmentsController {
    * POST /api/assignments/:id/offerings
    * Create a new offering for an assignment in a course section
    */
-  async createOffering({ params, request, response }: HttpContext) {
+  async createOffering({ bouncer, params, request, response }: HttpContext) {
     const assignment = await Assignment.findOrFail(params.id)
     const data = await request.validateUsing(createOfferingValidator)
+
+    await bouncer.with(AssignmentPolicy).authorize('createOffering', data.courseOfferingId)
 
     const offering = await AssignmentOffering.create({
       assignmentId: assignment.id,

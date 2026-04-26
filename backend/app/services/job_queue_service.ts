@@ -25,101 +25,152 @@
 //    no other files need to change when this is implemented.
 //    STATUS: stub [CRITICAL — must be implemented before production deployment]
 
-import EnqueuedJob from '#models/enqueued_job'
-import Submission from '#models/submission'
-import { DateTime } from 'luxon'
+import env from '#start/env'
+import logger from '@adonisjs/core/services/logger'
+
+export interface ExternalJobPayload {
+  data: {
+    job_id: number
+    submission_id: number
+    status: string
+    docker_image_tag: string
+    priority: number
+    submitted_at: string
+    started_at: string | null
+    completed_at: string | null
+    result?: {
+      correctness_score: number
+      tool_score: number
+      comments: string
+      test_output: string
+      exit_code: number
+      runtime_ms: number
+    }
+  }
+}
 
 /**
  * JobQueueService
  *
  * Handles all communication with the other team's REST API.
- * This is the integration boundary between your system and theirs.
+ * This is the integration boundary between our system and theirs.
  *
- * TODO: Confirm with other team:
- *   1. What is their API base URL?
- *   2. What fields do they need in the job payload?
- *   3. What do they return when a job is accepted?
- *   4. How do results come back — webhook, polling, or shared DB?
  */
 export default class JobQueueService {
-  // TODO: Add to .env once confirmed
-  // private baseUrl = env.get('JOB_QUEUE_API_URL')
-  // private apiKey = env.get('JOB_QUEUE_API_KEY')
+  private readonly baseUrl: string
 
+  constructor() {
+    this.baseUrl = this.getRequiredBaseUrl()
+  }
+
+  private getRequiredBaseUrl(): string {
+    const baseUrl = env.get('JOB_QUEUE_API_URL')
+
+    if (typeof baseUrl !== 'string' || baseUrl.trim() === '') {
+      throw new Error('Missing required JOB_QUEUE_API_URL configuration for JobQueueService')
+    }
+
+    return baseUrl
+  }
   /**
    * Submit a job to the other team's REST API.
    * Called after a submission is created.
    */
   async enqueue(
-    submission: Submission,
-    _priority: number = 0
-  ): Promise<{ externalJobId: string | null; success: boolean }> {
-    // TODO: Replace this stub with actual API call once other team confirms endpoint
-    //
-    // const response = await fetch(`${this.baseUrl}/jobs`, {
-    //   method: 'POST',
-    //   headers: {
-    //     'Content-Type': 'application/json',
-    //     'Authorization': `Bearer ${this.apiKey}`,
-    //   },
-    //   body: JSON.stringify({
-    //     submissionId: submission.id,
-    //     priority,
-    //     workerTag: 'python3',   // TODO: derive from assignment/exercise type
-    //     // filePath: submission.filePath,  // TODO: once file storage is decided
-    //   }),
-    // })
-    //
-    // const data = await response.json()
-    // return { externalJobId: data.jobId, success: response.ok }
+    submissionId: number,
+    fileBuffer: Buffer,
+    imageTag: string,
+    priority: number = 2
+  ): Promise<{ success: boolean; jobId?: number }> {
+    const formData = new FormData()
 
-    console.warn(
-      `[JobQueueService] enqueue() is a stub — submission ${submission.id} not actually sent`
-    )
-    return { externalJobId: null, success: false }
+    // Append the standard text fields
+    formData.append('submission_id', submissionId.toString())
+    formData.append('priority', priority.toString())
+    formData.append('callback_url', `${env.get('FRONTEND_URL')}/api/submissions/webhook`)
+    formData.append('docker_image_tag', imageTag.toString())
+
+    try {
+      // Read the file into memory and append it as a Blob.
+      // The execution-service API documents the multipart file field as `files`.
+      const fileBlob = new Blob([fileBuffer], { type: 'application/zip' })
+      formData.append('files', fileBlob, `submission_${submissionId}.zip`)
+
+      // Send the heavy request to the other team
+      const response = await fetch(`${this.baseUrl}/jobs`, {
+        method: 'POST',
+        // Note: Do NOT set the 'Content-Type' header manually when using FormData.
+        // fetch will automatically set it to 'multipart/form-data' with the correct boundary.
+        body: formData,
+        headers: {
+          'X-API-KEY': `${env.get('JOB_QUEUE_API_KEY')}`,
+        },
+      })
+
+      if (!response.ok) {
+        const errorBody = await response.text()
+        console.error(
+          `[JobQueueService] API rejected job. Status: ${response.status}. Body: ${errorBody}`
+        )
+        return { success: false }
+      }
+
+      const responseData = (await response.json()) as { data?: { job_id?: unknown } }
+      const jobId = responseData.data?.job_id
+
+      if (typeof jobId !== 'number' || !Number.isInteger(jobId)) {
+        logger.error(
+          `[JobQueueService] API response missing valid job_id for submission ${submissionId}`
+        )
+        return { success: false }
+      }
+
+      logger.info(
+        `[JobQueueService] Submitted submission ${submissionId} to execution API as job ${jobId}`
+      )
+
+      return { success: true, jobId }
+    } catch (error) {
+      console.error(`[JobQueueService] Failed to reach execution API:`, error)
+      return { success: false }
+    }
   }
 
   /**
-   * Check the status of a job from the other team's API.
+   * Check the status of a job.
    * Used if results come back via polling rather than webhook.
-   *
-   * TODO: Implement once other team confirms their status endpoint
    */
-  async checkStatus(externalJobId: string): Promise<{ status: string; result: unknown } | null> {
-    // TODO: Replace with actual API call
-    // const response = await fetch(`${this.baseUrl}/jobs/${externalJobId}`, {
-    //   headers: { 'Authorization': `Bearer ${this.apiKey}` },
-    // })
-    // return response.json()
-
-    console.warn(`[JobQueueService] checkStatus() is a stub — job ${externalJobId} not checked`)
-    return null
+  async checkStatus(jobId: number): Promise<any | null> {
+    console.info(`[JobQueueService] Checking status for job ${jobId} via execution API`)
+    try {
+      const response = await fetch(`${this.baseUrl}/jobs/${jobId}`)
+      if (!response.ok) return null
+      return await response.json()
+    } catch (error) {
+      return null
+    }
   }
 
   /**
-   * Handle a webhook callback from the other team when a job completes.
-   * Called from a dedicated webhook endpoint in routes.ts.
-   *
-   * TODO: Implement once other team confirms their webhook payload format
+   * Downloads the artifact payload from the execution cluster.
    */
-  async handleWebhook(payload: Record<string, unknown>): Promise<void> {
-    // TODO: Parse their webhook payload and update submission_result
-    // const { submissionId, score, feedback, passed } = payload
-    // await SubmissionResult.updateOrCreate(...)
-    console.warn('[JobQueueService] handleWebhook() is a stub — payload not processed', payload)
-  }
+  async downloadPayload(payloadUrl: string): Promise<Buffer | null> {
+    try {
+      // 1. Fetch the zip file from their cluster
+      // Note: payloadUrl is likely a relative path like "/jobs/142/payload"
+      const response = await fetch(`${this.baseUrl}${payloadUrl}`)
 
-  /**
-   * Store a local enqueued_job record for tracking.
-   * The other team manages this table but we create the initial record.
-   */
-  async createLocalRecord(submission: Submission, priority: number = 0): Promise<EnqueuedJob> {
-    return EnqueuedJob.create({
-      submissionId: submission.id,
-      priority,
-      status: 'pending',
-      retryCount: 0,
-      queueTime: DateTime.now(),
-    })
+      if (!response.ok) {
+        console.error(`[JobQueueService] Failed to download payload: ${response.statusText}`)
+        return null
+      }
+
+      // 2. Read the raw binary data into a Node.js Buffer
+      const arrayBuffer = await response.arrayBuffer()
+      return Buffer.from(arrayBuffer)
+    } catch (error) {
+      console.error(`[JobQueueService] Error downloading payload:`, error)
+      return null
+    }
   }
 }

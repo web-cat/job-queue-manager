@@ -11,12 +11,11 @@
 // OPERATION ORDER in store():
 //   1. Validate file presence and type
 //   2. Create submission_result stub (FK required by submission)
-//   3. Build objectKey from submission metadata
-//   4. Create submission record with filePath set to objectKey
-//   5. Upload file to MinIO
-//   6. On upload failure: delete submission + submissionResult, return 500
-//   7. Create enqueued_job record
-//   8. Return created records
+//   3. Create submission record with filePath set to objectKey
+//   4. Build objectKey from submission metadata and upload file to MinIO
+//   5. Update submission with final file path
+//   6. Enqueue with other team
+//   7. Update submission status to pending
 //
 // DEPENDENCIES: submission.ts, submission_result.ts, job_queue_service.ts,
 //   object_storage_service.ts
@@ -36,14 +35,13 @@
 
 // STATUS: complete [job queue enqueue and webhook handling pending other team API]
 
-import { DateTime } from 'luxon'
 import type { HttpContext } from '@adonisjs/core/http'
+import { inject } from '@adonisjs/core'
+import router from '@adonisjs/core/services/router'
 import vine from '@vinejs/vine'
 import Submission from '#models/submission'
-import SubmissionResult from '#models/submission_result'
-import JobQueueService from '#services/job_queue_service'
-import { uploadFileToObjectStorage } from '#services/object_storage_service'
-import env from '#start/env'
+import SubmissionService from '#services/submission_service'
+import SubmissionPolicy from '#policies/submission_policy'
 
 // ── Validators ───────────────────────────────────────────────────────
 
@@ -55,21 +53,50 @@ const createSubmissionValidator = vine.compile(
   })
 )
 
+const webhookPayloadValidator = vine.compile(
+  vine.object({
+    data: vine.object({
+      submission_id: vine.number().positive(),
+      status: vine.string(),
+      submitted_at: vine.string().optional(),
+      started_at: vine.string().optional(),
+      completed_at: vine.string().optional(),
+      retry_count: vine.number().optional(),
+      result: vine
+        .object({
+          correctness_score: vine.number().optional(),
+          tool_score: vine.number().optional(),
+          comments: vine.string().optional(),
+          comment_format: vine.string().optional(),
+          runtime_ms: vine.number().optional(),
+          exit_code: vine.number().optional(),
+          test_output: vine.string().optional(),
+          has_payload: vine.boolean().optional(),
+          payload_url: vine.string().optional(),
+        })
+        .optional(),
+    }),
+  })
+)
+
 // ── Controller ───────────────────────────────────────────────────────
 
+@inject()
 export default class SubmissionsController {
-  private jobQueueService = new JobQueueService()
+  constructor(private submissionService: SubmissionService) {}
 
   /**
    * GET /api/submissions
-   * List submissions for the authenticated user, paginated.
+   * List submissions visible to the authenticated user, paginated.
+   * Admins see all submissions, instructors see their courses' submissions,
+   * students see only their own submissions.
    */
-  async index({ auth, request, response }: HttpContext) {
-    const user = auth.getUserOrFail()
-    const { page = 1, limit = 20, assignmentOfferingId } = request.qs()
+  async index({ auth, bouncer, request, response }: HttpContext) {
+    auth.getUserOrFail()
+    const { page = 1, limit = 20, assignmentOfferingId, workoutId } = request.qs()
 
+    // Query all submissions matching the filters
     const query = Submission.query()
-      .where('user_id', user.id)
       .preload('assignmentOffering', (q) => q.preload('assignment'))
       .orderBy('created_at', 'desc')
 
@@ -77,25 +104,46 @@ export default class SubmissionsController {
       query.where('assignment_offering_id', assignmentOfferingId)
     }
 
-    const submissions = await query.paginate(page, limit)
+    if (workoutId) {
+      query.where('workout_id', workoutId)
+    }
 
-    return response.ok(submissions)
+    const allSubmissions = await query.paginate(page, limit)
+
+    // Filter by authorization — only include submissions the user can view
+    const authorizedSubmissions = []
+    for (const submission of allSubmissions.all()) {
+      try {
+        await bouncer.with(SubmissionPolicy).authorize('view', submission)
+        authorizedSubmissions.push(submission)
+      } catch {
+        // User not authorized to view this submission, skip it
+      }
+    }
+
+    // Return results with pagination metadata
+    return response.ok({
+      data: authorizedSubmissions,
+      meta: {
+        total: allSubmissions.total,
+        per_page: allSubmissions.perPage,
+        current_page: allSubmissions.currentPage,
+        last_page: allSubmissions.lastPage,
+      },
+    })
   }
 
   /**
    * GET /api/submissions/:id
    * Get a single submission with its enqueued job and assignment info.
-   * Only returns submissions belonging to the authenticated user.
    */
-  async show({ auth, params, response }: HttpContext) {
-    const user = auth.getUserOrFail()
-
+  async show({ bouncer, params, response }: HttpContext) {
     const submission = await Submission.query()
       .where('id', params.id)
-      .where('user_id', user.id)
       .preload('assignmentOffering', (q) => q.preload('assignment'))
-      .preload('enqueuedJob')
       .firstOrFail()
+
+    await bouncer.with(SubmissionPolicy).authorize('view', submission)
 
     return response.ok(submission)
   }
@@ -110,11 +158,15 @@ export default class SubmissionsController {
    *   isSubmissionForGrading (boolean, optional, default true)
    *   submission_zip        (file, required) — zip archive, max 100mb
    */
-  async store({ auth, request, response }: HttpContext) {
+  async store({ auth, bouncer, request, response }: HttpContext) {
     const user = auth.getUserOrFail()
     const data = await request.validateUsing(createSubmissionValidator)
 
-    // ── Step 1: Validate uploaded file ───────────────────────────
+    await bouncer
+      .with(SubmissionPolicy)
+      .authorize('create', data.workoutId, data.assignmentOfferingId)
+
+    // Validate uploaded file
     const submissionArchive = request.file('submission_zip', {
       size: '100mb',
       extnames: ['zip'],
@@ -137,65 +189,24 @@ export default class SubmissionsController {
       })
     }
 
-    // ── Step 2: Create submission_result stub (FK required) ───────
-    const submissionResult = await SubmissionResult.create({
-      correctnessScore: 0,
-    })
-
-    // ── Step 3: Create submission record ─────────────────────────
-    // filePath is set to a predictable key format — will be updated
-    // to the final objectKey after we know the submission ID
-    const submission = await Submission.create({
-      userId: user.id,
-      workoutId: data.workoutId,
-      assignmentOfferingId: data.assignmentOfferingId ?? null,
-      submissionResultId: submissionResult.id,
-      isSubmissionForGrading: data.isSubmissionForGrading ?? true,
-      feedbackReady: false,
-      partnerLink: false,
-      submitTime: DateTime.now(),
-      filePath: null, // set after upload below
-    })
-
-    // ── Step 4: Build object key and upload to MinIO ──────────────
-    const objectKey = `submissions/${submission.id}/input/${submissionArchive.clientName}`
-
     try {
-      await uploadFileToObjectStorage(
-        env.get('S3_BUCKET'),
-        objectKey,
-        submissionArchive.tmpPath,
-        submissionArchive.type || 'application/zip'
+      // Delegate all business logic to the service
+      const { submission, archivePath } = await this.submissionService.processSubmission(
+        user.id,
+        data,
+        submissionArchive
       )
-    } catch (error) {
-      // Clean up DB records if upload fails
-      await submission.delete()
-      await submissionResult.delete()
 
+      return response.created({
+        submission,
+        archivePath,
+      })
+    } catch (error) {
       return response.internalServerError({
-        message: 'Failed to upload submission archive',
+        message: 'Failed to process submission',
         error: error instanceof Error ? error.message : 'Unknown upload error',
       })
     }
-
-    // ── Step 5: Update submission with final file path ────────────
-    await submission.merge({ filePath: objectKey }).save()
-
-    // ── Step 6: Create local enqueued_job record ──────────────────
-    const enqueuedJob = await this.jobQueueService.createLocalRecord(submission)
-
-    // ── Step 7: Enqueue with other team (stubbed) ─────────────────
-    // TODO: Uncomment once other team confirms their endpoint URL and payload format
-    // const { externalJobId, success } = await this.jobQueueService.enqueue(submission)
-    // if (!success) {
-    //   return response.serviceUnavailable({ message: 'Job queue unavailable' })
-    // }
-
-    return response.created({
-      submission,
-      enqueuedJob,
-      archivePath: objectKey,
-    })
   }
 
   /**
@@ -206,13 +217,10 @@ export default class SubmissionsController {
    * NOTE: score is read from submission.score — confirm with other team
    * whether they write to this column or to submission_result.correctness_score.
    */
-  async result({ auth, params, response }: HttpContext) {
-    const user = auth.getUserOrFail()
+  async result({ bouncer, params, response }: HttpContext) {
+    const submission = await Submission.query().where('id', params.id).firstOrFail()
 
-    const submission = await Submission.query()
-      .where('id', params.id)
-      .where('user_id', user.id)
-      .firstOrFail()
+    await bouncer.with(SubmissionPolicy).authorize('view', submission)
 
     if (!submission.feedbackReady) {
       return response.ok({ ready: false, message: 'Grading is still in progress' })
@@ -221,15 +229,15 @@ export default class SubmissionsController {
     return response.ok({
       ready: true,
       submissionId: submission.id,
-      score: submission.score,
     })
   }
 
   /**
    * PUT/PATCH /api/submissions/:id
-   * Update a submission (stub — not currently used by frontend).
+   * Update a submission
    */
-  async update({ params, request, response }: HttpContext) {
+  async update({ bouncer, params, request, response }: HttpContext) {
+    await bouncer.with(SubmissionPolicy).authorize('update')
     const submission = await Submission.findOrFail(params.id)
     const data = request.only(['feedbackReady', 'score'])
     await submission.merge(data).save()
@@ -238,9 +246,10 @@ export default class SubmissionsController {
 
   /**
    * DELETE /api/submissions/:id
-   * Delete a submission (stub — not currently used by frontend).
+   * Delete a submission
    */
-  async destroy({ params, response }: HttpContext) {
+  async destroy({ bouncer, params, response }: HttpContext) {
+    await bouncer.with(SubmissionPolicy).authorize('delete')
     const submission = await Submission.findOrFail(params.id)
     await submission.delete()
     return response.noContent()
@@ -251,17 +260,74 @@ export default class SubmissionsController {
    * Receives result callbacks from the other team when grading completes.
    * Public route — no auth token required.
    *
-   * TODO: Implement once other team confirms webhook payload format.
-   * Expected payload (unconfirmed):
-   *   { submissionId, score, feedbackReady, testResults: [...] }
-   * On receipt: update submission.score, submission.feedbackReady = true,
-   *   update submission_result.correctnessScore with actual score.
-   *
    * SECURITY: Should be IP restricted to other team's cluster IPs in production.
    */
   async webhook({ request, response }: HttpContext) {
-    const payload = request.body()
-    await this.jobQueueService.handleWebhook(payload)
+    const payload = await request.validateUsing(webhookPayloadValidator)
+    await this.submissionService.handleWebhook(payload)
     return response.ok({ received: true })
+  }
+
+  /**
+   * GET /api/submissions/:id/download-url
+   * Generates a signed, short-lived URL for downloading the submission.
+   */
+  async downloadUrl({ bouncer, params, response }: HttpContext) {
+    const submission = await Submission.query().where('id', params.id).firstOrFail()
+
+    await bouncer.with(SubmissionPolicy).authorize('view', submission)
+
+    if (!submission.filePath) {
+      return response.notFound({ message: 'No file associated with this submission' })
+    }
+
+    const url = router
+      .builder()
+      .params({ id: submission.id })
+      .makeSigned('submissions.download', { expiresIn: '5m' })
+
+    return response.ok({ url })
+  }
+
+  /**
+   * GET /api/submissions/:id/download
+   * Supports two access modes:
+   * 1) Signed URL access (public, short-lived)
+   * 2) Authenticated access (api/hmac guard + bouncer policy)
+   */
+  async download({ auth, bouncer, request, params, response }: HttpContext) {
+    const submissionId = Number(params.id)
+    let authorized = request.hasValidSignature()
+
+    if (!authorized) {
+      try {
+        await auth.authenticateUsing(['api'])
+        const submission = await Submission.query().where('id', submissionId).firstOrFail()
+        await bouncer.with(SubmissionPolicy).authorize('view', submission)
+        authorized = true
+      } catch {
+        return response.unauthorized({ message: 'Invalid/expired link or unauthorized request' })
+      }
+    }
+
+    if (!authorized) {
+      return response.unauthorized({ message: 'Invalid/expired link or unauthorized request' })
+    }
+
+    try {
+      const { fileBuffer, filename } =
+        await this.submissionService.getSubmissionDownload(submissionId)
+
+      response.header('Content-Disposition', `attachment; filename="${filename}"`)
+      response.header('Content-Type', 'application/zip')
+
+      return response.send(fileBuffer)
+    } catch (error) {
+      if (error instanceof Error && error.message === 'No file associated with this submission') {
+        return response.notFound({ message: error.message })
+      }
+
+      return response.internalServerError({ message: 'Failed to download file' })
+    }
   }
 }

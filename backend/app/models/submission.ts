@@ -20,12 +20,11 @@
 // STATUS: complete [NEEDS INLINE DOCS — workoutId naming explanation]
 
 import { DateTime } from 'luxon'
-import { BaseModel, column, belongsTo, hasOne } from '@adonisjs/lucid/orm'
-import type { BelongsTo, HasOne } from '@adonisjs/lucid/types/relations'
+import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
+import type { BelongsTo } from '@adonisjs/lucid/types/relations'
 import User from './user.js'
 import Assignment from './assignment.js'
 import AssignmentOffering from './assignment_offering.js'
-import EnqueuedJob from './enqueued_job.js'
 
 export default class Submission extends BaseModel {
   static table = 'submission'
@@ -40,10 +39,13 @@ export default class Submission extends BaseModel {
   declare workoutId: number
 
   @column()
-  declare assignmentOfferingId: number | null
+  declare externalJobId: number | null
 
   @column()
-  declare score: number | null
+  declare status: string
+
+  @column()
+  declare assignmentOfferingId: number | null
 
   @column()
   declare filePath: string | null
@@ -53,6 +55,9 @@ export default class Submission extends BaseModel {
 
   @column()
   declare submitNumber: number | null
+
+  @column()
+  declare retryCount: number
 
   @column()
   declare isSubmissionForGrading: boolean
@@ -104,7 +109,4 @@ export default class Submission extends BaseModel {
 
   @belongsTo(() => AssignmentOffering)
   declare assignmentOffering: BelongsTo<typeof AssignmentOffering>
-
-  @hasOne(() => EnqueuedJob)
-  declare enqueuedJob: HasOne<typeof EnqueuedJob>
 }

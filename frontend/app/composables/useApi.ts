@@ -14,13 +14,28 @@ import { useAuthStore } from "~/stores/auth";
 export function useApi() {
   const config = useRuntimeConfig();
   const authStore = useAuthStore();
+  const toast = useToast();
 
   const baseURL = config.public.apiBase;
 
-  function getHeaders(): Record<string, string> {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
+  const handleResponseError = async ({ response }: any) => {
+    if (response.status === 403) {
+      toast.add({
+        title: "Access Denied",
+        description: response._data?.message || "You do not have permission to perform this action.",
+        color: "red"
+      });
+      // Re-fetch user to sync roles in case they changed
+      await authStore.me();
+    }
+  };
+
+  function getHeaders(body?: unknown): Record<string, string> {
+    const headers: Record<string, string> = {};
+    // Do not set Content-Type for FormData; the browser needs to set it with the boundary
+    if (!(body instanceof FormData)) {
+      headers["Content-Type"] = "application/json";
+    }
     if (authStore.token) {
       headers["Authorization"] = `Bearer ${authStore.token}`;
     }
@@ -35,28 +50,31 @@ export function useApi() {
       method: "GET",
       headers: getHeaders(),
       params,
+      onResponseError: handleResponseError,
     });
   }
 
   async function post<T>(
     path: string,
-    body?: Record<string, unknown> | unknown[],
+    body?: Record<string, unknown> | unknown[] | FormData,
   ): Promise<T> {
     return $fetch<T>(`${baseURL}/api${path}`, {
       method: "POST",
-      headers: getHeaders(),
-      body: body as Record<string, unknown>,
+      headers: getHeaders(body),
+      body: body as any,
+      onResponseError: handleResponseError,
     });
   }
 
   async function patch<T>(
     path: string,
-    body?: Record<string, unknown> | unknown[],
+    body?: Record<string, unknown> | unknown[] | FormData,
   ): Promise<T> {
     return $fetch<T>(`${baseURL}/api${path}`, {
       method: "PATCH",
-      headers: getHeaders(),
-      body: body as Record<string, unknown>,
+      headers: getHeaders(body),
+      body: body as any,
+      onResponseError: handleResponseError,
     });
   }
 
@@ -64,6 +82,7 @@ export function useApi() {
     return $fetch<T>(`${baseURL}/api${path}`, {
       method: "DELETE",
       headers: getHeaders(),
+      onResponseError: handleResponseError,
     });
   }
 

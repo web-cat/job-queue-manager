@@ -45,13 +45,14 @@ export default await Env.create(new URL('../', import.meta.url), {
   CAS_BASE_URL: Env.schema.string.optional(),
   CAS_SERVICE_URL: Env.schema.string.optional(),
   FRONTEND_URL: Env.schema.string.optional(),
+  BACKEND_URL: Env.schema.string.optional(),
 
   /*
   |----------------------------------------------------------
-  | Variables for job queue integration with other team
+  | Variable for job queue integration with other team
   |
   | Optional — stubbed until other team confirms their API.
-  | Fill these in when the other team provides their endpoint.
+  | Fill this in when the other team provides their endpoint.
   |----------------------------------------------------------
   */
   JOB_QUEUE_API_URL: Env.schema.string.optional(),

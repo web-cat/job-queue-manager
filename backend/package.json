@@ -32,7 +32,9 @@
     "#database/*": "./database/*.js",
     "#start/*": "./start/*.js",
     "#tests/*": "./tests/*.js",
-    "#config/*": "./config/*.js"
+    "#config/*": "./config/*.js",
+    "#utils/*": "./app/utils/*.js",
+    "#auth/*": "./app/auth/*.js"
   },
   "devDependencies": {
     "@adonisjs/assembler": "^7.8.2",
@@ -55,6 +57,7 @@
   },
   "dependencies": {
     "@adonisjs/auth": "^9.4.0",
+    "@adonisjs/bouncer": "^3.1.6",
     "@adonisjs/core": "^6.18.0",
     "@adonisjs/cors": "^2.2.1",
     "@adonisjs/lucid": "^21.6.1",

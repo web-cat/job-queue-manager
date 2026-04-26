@@ -30,21 +30,23 @@ jobs:
 
     env:
       NODE_ENV: test
-      HOST: 0.0.0.0
+      HOST: 127.0.0.1
       PORT: 3333
       APP_KEY: testkey-not-for-production-use-only
-      DB_HOST: 127.0.0.1
+      DB_HOST: localhost
       DB_PORT: 5432
       DB_USER: user
-      DB_PASSWORD: webcatmaxxing
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
       DB_DATABASE: postgres
       LOG_LEVEL: error
       TZ: UTC
       CAS_BASE_URL: https://login.cs.vt.edu/cas
       CAS_SERVICE_URL: http://localhost:3333/api/auth/cas/callback
       FRONTEND_URL: http://localhost:3000
+      JOB_QUEUE_API_URL: https://web-cat-execution-service.discovery.cs.vt.edu/api/v1
+      JOB_QUEUE_API_KEY: ${{ secrets.JOB_QUEUE_API_KEY }}
       AWS_ACCESS_KEY_ID: minioadmin
-      AWS_SECRET_ACCESS_KEY: webcatmaxxing
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_REGION: us-east-1
       S3_BUCKET: data
       S3_ENDPOINT: http://localhost:9000

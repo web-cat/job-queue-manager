@@ -29,15 +29,16 @@ import type { NextFn } from '@adonisjs/core/types/http'
  */
 export default class AdminMiddleware {
   async handle({ auth, response }: HttpContext, next: NextFn) {
-    const user = auth.getUserOrFail()
+    const user = auth.getUserOrFail() as any
 
-    // Check admin via globalRole relationship
-    await user.load('globalRole')
+    // Load globalRole if not already preloaded
+    if (!user.$preloaded.globalRole) {
+      await (user as any).load('globalRole')
+    }
 
     if (!user.globalRole?.canManageAllCourses) {
       return response.forbidden({ message: 'Admin access required' })
     }
-
     return next()
   }
 }

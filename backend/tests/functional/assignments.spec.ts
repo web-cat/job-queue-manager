@@ -1,5 +1,6 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
+import User from '#models/user'
 
 // Helper to register and get a token
 async function loginAsUser(client: any) {
@@ -10,6 +11,12 @@ async function loginAsUser(client: any) {
     email,
     password: 'password123',
   })
+  
+  // Promote user to Admin to pass Bouncer RBAC during tests
+  const user = await User.findByOrFail('email', email)
+  user.globalRoleId = 1
+  await user.save()
+
   return { token: register.body().token.token, email }
 }
 
