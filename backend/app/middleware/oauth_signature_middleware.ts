@@ -163,6 +163,7 @@ export default class OAuthSignatureMiddleware {
     // Makes HMAC-authenticated requests behave identically to session-authenticated
     // requests. All Bouncer policies see the client's owner as the current user.
     ctx.auth.getUserOrFail = () => client.user as any
+    ;(ctx as any).hmacUser = client.user // set the hmac guard
 
     return next()
   }
