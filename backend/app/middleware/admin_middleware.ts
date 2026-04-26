@@ -29,7 +29,7 @@ import type { NextFn } from '@adonisjs/core/types/http'
  */
 export default class AdminMiddleware {
   async handle({ auth, response }: HttpContext, next: NextFn) {
-    const user = auth.getUserOrFail()
+    const user = auth.getUserOrFail() as any
 
     // Load globalRole if not already preloaded
     if (!user.$preloaded.globalRole) {
