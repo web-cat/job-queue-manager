@@ -28,12 +28,13 @@ const TIMESTAMP_TOLERANCE_MS = 5 * 60 * 1000
 
 // In-memory nonce store — move to Redis for multi-pod deployments
 const usedNonces = new Map<string, number>()
-setInterval(() => {
+const interval = setInterval(() => {
   const cutoff = Date.now() - TIMESTAMP_TOLERANCE_MS
   for (const [nonce, ts] of usedNonces.entries()) {
     if (ts < cutoff) usedNonces.delete(nonce)
   }
-}, 60_000).unref()
+}, 60_000)
+interval.unref() // allows process to exit even if interval is pending
 
 export class HmacGuard implements GuardContract<User> {
   // Required by GuardContract
