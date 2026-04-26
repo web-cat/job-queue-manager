@@ -22,6 +22,7 @@ import Assignment from '#models/assignment'
 import AssignmentOffering from '#models/assignment_offering'
 import { DateTime } from 'luxon'
 import AssignmentPolicy from '#policies/assignment_policy'
+import db from '@adonisjs/lucid/services/db'
 
 // ── Validators ───────────────────────────────────────────────────────
 
@@ -79,7 +80,10 @@ export default class AssignmentsController {
             subq
               .select('id')
               .from('course_enrollment')
-              .whereColumn('course_enrollment.course_offering_id', 'assignment_offering.course_offering_id')
+              .whereColumn(
+                'course_enrollment.course_offering_id',
+                'assignment_offering.course_offering_id'
+              )
               .where('course_enrollment.user_id', user.id)
           })
         })
@@ -142,9 +146,7 @@ export default class AssignmentsController {
    * Update an assignment
    */
   async update({ bouncer, params, request, response }: HttpContext) {
-    const assignment = await Assignment.query()
-      .where('id', params.id)
-      .firstOrFail()
+    const assignment = await Assignment.query().where('id', params.id).firstOrFail()
 
     await bouncer.with(AssignmentPolicy).authorize('update', assignment)
 
@@ -160,9 +162,7 @@ export default class AssignmentsController {
    * Delete an assignment
    */
   async destroy({ bouncer, params, response }: HttpContext) {
-    const assignment = await Assignment.query()
-      .where('id', params.id)
-      .firstOrFail()
+    const assignment = await Assignment.query().where('id', params.id).firstOrFail()
 
     await bouncer.with(AssignmentPolicy).authorize('delete', assignment)
 
@@ -210,5 +210,42 @@ export default class AssignmentsController {
     })
 
     return response.created(offering)
+  }
+
+  /**
+   * GET /api/assignments/:id/wait-time
+   * Returns estimated wait time based on exponential moving average
+   * of recent execution times for this assignment.
+   */
+  async waitTime({ params, response }: HttpContext) {
+    const assignmentId = params.id
+
+    // Get last 20 completed submissions with runtime data
+    const results = await db
+      .from('submission_result as sr')
+      .join('submission as s', 's.submission_result_id', 'sr.id')
+      .where('s.workout_id', assignmentId)
+      .where('s.status', 'completed')
+      .whereNotNull('sr.runtime_ms')
+      .orderBy('sr.completed_at', 'desc')
+      .limit(20)
+      .select('sr.runtime_ms')
+
+    if (results.length === 0) {
+      return response.ok({ estimatedWaitMs: null, sampleSize: 0 })
+    }
+
+    // Compute EMA — alpha=0.3 gives more weight to recent runs
+    const alpha = 0.3
+    let ema = results[results.length - 1].runtime_ms // start from oldest
+    for (let i = results.length - 2; i >= 0; i--) {
+      ema = alpha * results[i].runtime_ms + (1 - alpha) * ema
+    }
+
+    return response.ok({
+      estimatedWaitMs: Math.round(ema),
+      estimatedWaitSeconds: Math.round(ema / 1000),
+      sampleSize: results.length,
+    })
   }
 }
