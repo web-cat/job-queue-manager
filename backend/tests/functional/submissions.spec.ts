@@ -1,7 +1,6 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import User from '#models/user'
-import env from '#start/env'
 import { createHash, createHmac, randomUUID } from 'node:crypto'
 
 // Helper to register and get a token

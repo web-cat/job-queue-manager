@@ -7,8 +7,8 @@ export default class ServiceAccountMiddleware {
 
     // Assuming 4 is the ID for the 'Service Account' role
     if (user.globalRoleId !== 4) {
-      return response.forbidden({ 
-        message: 'Only registered service accounts can access this endpoint.' 
+      return response.forbidden({
+        message: 'Only registered service accounts can access this endpoint.',
       })
     }
 
