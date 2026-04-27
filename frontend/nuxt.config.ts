@@ -13,7 +13,7 @@ export default defineNuxtConfig({
 
   icon: {
     provider: "server",
-    collections: ["heroicons", "lucide"]
+    collections: ["heroicons", "lucide"],
   },
 
   vite: {
