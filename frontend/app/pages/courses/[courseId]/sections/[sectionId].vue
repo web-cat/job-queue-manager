@@ -32,7 +32,12 @@ const isInstructor = computed(() => {
 
 const { data: policies } = await useAsyncData(
   "submission-policies",
-  () => get<any[]>("/submission-policies").catch(() => [])
+  () => {
+    if (isInstructor.value) {
+      return get<any[]>("/submission-policies").catch(() => [])
+    }
+    return Promise.resolve([])
+  }
 );
 
 const isSlideoverOpen = ref(false);
