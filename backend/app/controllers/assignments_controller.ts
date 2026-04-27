@@ -96,9 +96,13 @@ export default class AssignmentsController {
     }
 
     if (sectionId) {
-      query.whereHas('assignmentOfferings', (q) => {
-        q.where('course_offering_id', sectionId)
-      })
+      query
+        .whereHas('assignmentOfferings', (q) => {
+          q.where('course_offering_id', sectionId)
+        })
+        .preload('assignmentOfferings', (q) => {
+          q.where('course_offering_id', sectionId)
+        })
     }
 
     const assignments = await query.paginate(page, limit)
