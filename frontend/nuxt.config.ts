@@ -9,7 +9,12 @@ export default defineNuxtConfig({
     "/**": { ssr: false },
   },
 
-  modules: ["@pinia/nuxt", "@nuxt/ui"],
+  modules: ["@pinia/nuxt", "@nuxt/ui", "@nuxt/icon"],
+
+  icon: {
+    provider: "server",
+    collections: ["heroicons", "lucide"]
+  },
 
   vite: {
     optimizeDeps: {
