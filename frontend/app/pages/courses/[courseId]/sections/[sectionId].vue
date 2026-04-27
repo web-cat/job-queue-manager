@@ -2,8 +2,9 @@
 definePageMeta({ middleware: "auth" });
 
 const route = useRoute();
-const { get, post } = useApi();
+const { get, post, patch } = useApi();
 const toast = useToast();
+const authStore = useAuthStore();
 
 const courseId = route.params.courseId;
 const sectionId = route.params.sectionId;
@@ -111,6 +112,7 @@ const filtered = computed(() => {
   );
 });
 
+// ── Due date helpers ─────────────────────────────────────────────────
 function formatDueDate(iso: string | null | undefined): string | null {
   if (!iso) return null;
   const d = new Date(iso);
@@ -126,6 +128,87 @@ function dueUrgency(iso: string | null | undefined): 'past' | 'soon' | 'ok' | nu
   if (diff < 0) return 'past';
   if (diff < 48 * 60 * 60 * 1000) return 'soon';
   return 'ok';
+}
+
+/** Convert ISO/DB datetime string → datetime-local input value (YYYY-MM-DDTHH:mm) */
+function toDatetimeLocal(iso: string | null | undefined): string {
+  if (!iso) return '';
+  // Slice to 'YYYY-MM-DDTHH:mm'
+  return new Date(iso).toISOString().slice(0, 16);
+}
+
+// ── Edit assignment ──────────────────────────────────────────────────
+const isGlobalInstructor = computed(
+  () => authStore.user?.globalRoleId === 1 || authStore.user?.globalRoleId === 2
+);
+
+const isEditSlideoverOpen = ref(false);
+const editingAssignment = ref<any>(null);
+const editState = ref({
+  name: '',
+  description: '',
+  submissionPolicyId: null as number | null,
+  isPublic: true,
+  published: true,
+  availableFrom: '',
+  dueAt: '',
+  attemptLimit: null as number | null,
+  isUnlimitedAttempts: true,
+});
+
+function openEditSlideover(assignment: any) {
+  const offering = assignment.assignmentOfferings?.[0];
+  editingAssignment.value = assignment;
+  editState.value = {
+    name: assignment.name ?? '',
+    description: assignment.description ?? '',
+    submissionPolicyId: assignment.submissionPolicyId ?? null,
+    isPublic: assignment.isPublic ?? true,
+    published: offering?.published ?? true,
+    availableFrom: toDatetimeLocal(offering?.availableFrom),
+    dueAt: toDatetimeLocal(offering?.dueAt),
+    attemptLimit: offering?.attemptLimit ?? null,
+    isUnlimitedAttempts: !offering?.attemptLimit,
+  };
+  isEditSlideoverOpen.value = true;
+}
+
+async function saveAssignment() {
+  if (!editingAssignment.value) return;
+  const id = editingAssignment.value.id;
+
+  try {
+    // 1. Update shared assignment fields
+    await patch(`/assignments/${id}`, {
+      name: editState.value.name,
+      description: editState.value.description || undefined,
+      submissionPolicyId: editState.value.submissionPolicyId ?? undefined,
+      isPublic: editState.value.isPublic,
+    });
+
+    // 2. Update section-specific offering (dates, limits, published)
+    const offeringId = editingAssignment.value.assignmentOfferings?.[0]?.id;
+    if (offeringId) {
+      await patch(`/assignments/${id}/offerings/${offeringId}`, {
+        availableFrom: editState.value.availableFrom || undefined,
+        dueAt: editState.value.dueAt || undefined,
+        published: editState.value.published,
+        attemptLimit: editState.value.isUnlimitedAttempts
+          ? undefined
+          : (editState.value.attemptLimit ?? undefined),
+      });
+    }
+
+    toast.add({ title: 'Saved', description: 'Assignment updated.', color: 'success' });
+    isEditSlideoverOpen.value = false;
+    refreshNuxtData(`section-${sectionId}-assignments`);
+  } catch (e: any) {
+    toast.add({
+      title: 'Save failed',
+      description: e?.data?.message ?? e?.message ?? 'Please try again.',
+      color: 'error',
+    });
+  }
 }
 </script>
 
@@ -328,12 +411,23 @@ function dueUrgency(iso: string | null | undefined): 'past' | 'soon' | 'ok' | nu
                 class="w-5 h-5 text-[#861F41]"
               />
             </div>
-            <UBadge
-              :label="assignment.isPublic ? 'Public' : 'Private'"
-              :color="assignment.isPublic ? 'success' : 'neutral'"
-              variant="soft"
-              size="xs"
-            />
+            <div class="flex items-center gap-2">
+              <UBadge
+                :label="assignment.isPublic ? 'Public' : 'Private'"
+                :color="assignment.isPublic ? 'success' : 'neutral'"
+                variant="soft"
+                size="xs"
+              />
+              <UButton
+                v-if="isGlobalInstructor"
+                icon="i-heroicons-pencil-square"
+                size="xs"
+                variant="ghost"
+                color="neutral"
+                title="Edit assignment"
+                @click.prevent.stop="openEditSlideover(assignment)"
+              />
+            </div>
           </div>
 
           <h3
@@ -380,6 +474,85 @@ function dueUrgency(iso: string | null | undefined): 'past' | 'soon' | 'ok' | nu
       </div>
     </div>
 
+    <!-- Edit Assignment Slideover -->
+    <USlideover v-model:open="isEditSlideoverOpen">
+      <template #content>
+        <div class="p-4 flex-1 overflow-y-auto bg-white dark:bg-gray-900">
+          <div class="flex items-center justify-between mb-6">
+            <h3 class="text-xl font-semibold text-gray-900 dark:text-white">
+              Edit Assignment
+            </h3>
+            <UButton
+              color="neutral"
+              variant="ghost"
+              icon="i-heroicons-x-mark"
+              @click="isEditSlideoverOpen = false"
+            />
+          </div>
+
+          <UForm :state="editState" @submit="saveAssignment" class="flex flex-col gap-5">
+            <div class="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-lg mb-2">
+              <div class="text-sm text-amber-700 dark:text-amber-300">
+                <span class="font-semibold">Editing:</span> {{ editingAssignment?.name }}<br />
+                <span class="font-semibold">Section:</span> {{ section?.label ?? `Section ${section?.id}` }}
+              </div>
+            </div>
+
+            <UFormField label="Assignment Name">
+              <UInput v-model="editState.name" required placeholder="e.g. Project 1" />
+            </UFormField>
+
+            <UFormField label="Description (Optional)">
+              <UTextarea v-model="editState.description" rows="3" placeholder="Brief details about the assignment..." />
+            </UFormField>
+
+            <UFormField label="Submission Policy">
+              <USelectMenu
+                v-model="editState.submissionPolicyId"
+                :items="policies || []"
+                value-key="id"
+                label-key="name"
+                placeholder="Select Policy"
+              />
+            </UFormField>
+
+            <div class="grid grid-cols-2 gap-4">
+              <UFormField label="Available From (Optional)">
+                <UInput v-model="editState.availableFrom" type="datetime-local" />
+              </UFormField>
+              <UFormField label="Due At (Optional)">
+                <UInput v-model="editState.dueAt" type="datetime-local" />
+              </UFormField>
+            </div>
+
+            <UFormField label="Attempt Limit">
+              <div class="flex items-center gap-4">
+                <UCheckbox v-model="editState.isUnlimitedAttempts" label="Unlimited" />
+                <UInput
+                  v-if="!editState.isUnlimitedAttempts"
+                  v-model="editState.attemptLimit"
+                  type="number"
+                  min="1"
+                  placeholder="Limit"
+                  class="w-24"
+                  required
+                />
+              </div>
+            </UFormField>
+
+            <div class="flex flex-col gap-3 mt-2">
+              <UCheckbox v-model="editState.isPublic" label="Is Public (Visible in global catalog)" />
+              <UCheckbox v-model="editState.published" label="Published (Active for this section)" />
+            </div>
+
+            <div class="mt-6 flex justify-end gap-3">
+              <UButton variant="ghost" color="neutral" @click="isEditSlideoverOpen = false">Cancel</UButton>
+              <UButton type="submit" color="primary">Save Changes</UButton>
+            </div>
+          </UForm>
+        </div>
+      </template>
+    </USlideover>
 
   </div>
 </template>

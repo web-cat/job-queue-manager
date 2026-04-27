@@ -46,6 +46,18 @@ const updateAssignmentValidator = vine.compile(
     isPublic: vine.boolean().optional(),
     scrambled: vine.boolean().optional(),
     pointsMultiplier: vine.number().optional(),
+    submissionPolicyId: vine.number().positive().optional(),
+  })
+)
+
+const updateOfferingValidator = vine.compile(
+  vine.object({
+    availableFrom: vine.string().optional(),
+    dueAt: vine.string().optional(),
+    acceptUntil: vine.string().optional(),
+    published: vine.boolean().optional(),
+    timeLimit: vine.number().positive().optional(),
+    attemptLimit: vine.number().positive().optional(),
   })
 )
 
@@ -189,6 +201,34 @@ export default class AssignmentsController {
       .orderBy('due_at', 'asc')
 
     return response.ok(offerings)
+  }
+
+  /**
+   * PATCH /api/assignments/:id/offerings/:offeringId
+   * Update an existing offering's dates, limits, and published state
+   */
+  async updateOffering({ bouncer, params, request, response }: HttpContext) {
+    const assignment = await Assignment.findOrFail(params.id)
+    await bouncer.with(AssignmentPolicy).authorize('update', assignment)
+
+    const offering = await AssignmentOffering.query()
+      .where('id', params.offeringId)
+      .where('assignment_id', params.id)
+      .firstOrFail()
+
+    const data = await request.validateUsing(updateOfferingValidator)
+
+    offering.merge({
+      availableFrom: data.availableFrom ? DateTime.fromISO(data.availableFrom) : offering.availableFrom,
+      dueAt: data.dueAt ? DateTime.fromISO(data.dueAt) : offering.dueAt,
+      acceptUntil: data.acceptUntil ? DateTime.fromISO(data.acceptUntil) : offering.acceptUntil,
+      published: data.published ?? offering.published,
+      timeLimit: data.timeLimit ?? offering.timeLimit,
+      attemptLimit: data.attemptLimit ?? offering.attemptLimit,
+    })
+    await offering.save()
+
+    return response.ok(offering)
   }
 
   /**

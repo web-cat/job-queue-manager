@@ -27,7 +27,7 @@ export default class AssignmentPolicy extends BasePolicy {
   }
 
   async update(user: User, assignment: Assignment) {
-    if (user.globalRoleId === 1) return true
+    if (user.globalRoleId === 1 || user.globalRoleId === 2) return true
     return assignment.userId === user.id
   }
 
