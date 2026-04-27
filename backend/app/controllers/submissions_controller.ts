@@ -62,19 +62,18 @@ const webhookPayloadValidator = vine.compile(
       started_at: vine.string().optional(),
       completed_at: vine.string().optional(),
       retry_count: vine.number().optional(),
-      result: vine
-        .object({
-          correctness_score: vine.number().optional(),
-          tool_score: vine.number().optional(),
-          comments: vine.string().optional(),
-          comment_format: vine.string().optional(),
-          runtime_ms: vine.number().optional(),
-          exit_code: vine.number().optional(),
-          test_output: vine.string().optional(),
-          has_payload: vine.boolean().optional(),
-          payload_url: vine.string().optional(),
-        })
-        .optional(),
+      result: vine.object({
+        correctness_score: vine.number().optional(),
+        tool_score: vine.number().optional(),
+        comments: vine.string().optional(),
+        comment_format: vine.number().optional(),
+        commentFormat: vine.number().optional(),
+        runtime_ms: vine.number().optional(),
+        exit_code: vine.number().optional(),
+        test_output: vine.string().optional(),
+        has_payload: vine.boolean().optional(),
+        payload_url: vine.string().optional(),
+      }),
     }),
   })
 )
@@ -256,11 +255,9 @@ export default class SubmissionsController {
   }
 
   /**
-   * POST /api/submissions/webhook
+   * POST /api/v1/submissions/webhook
    * Receives result callbacks from the other team when grading completes.
-   * Public route — no auth token required.
-   *
-   * SECURITY: Should be IP restricted to other team's cluster IPs in production.
+   * Protected route — HMAC authentication required.
    */
   async webhook({ request, response }: HttpContext) {
     const payload = await request.validateUsing(webhookPayloadValidator)

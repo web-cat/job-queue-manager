@@ -87,7 +87,7 @@ export default class JobQueueService {
     // Append the standard text fields
     formData.append('submission_id', submissionId.toString())
     formData.append('priority', priority.toString())
-    formData.append('callback_url', `${env.get('FRONTEND_URL')}/api/submissions/webhook`)
+    formData.append('callback_url', `${env.get('FRONTEND_URL')}/api/v1/submissions/webhook`)
     formData.append('docker_image_tag', imageTag.toString())
 
     try {

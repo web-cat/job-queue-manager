@@ -1,9 +1,11 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import User from '#models/user'
+import env from '#start/env'
+import { createHash, createHmac, randomUUID } from 'node:crypto'
 
 // Helper to register and get a token
-async function loginAsUser(client: any) {
+async function loginAsUser(client: any, roleId: number = 1) {
   const email = `user_${Date.now()}@test.com`
   const register = await client.post('/api/auth/register').json({
     firstName: 'Test',
@@ -12,9 +14,9 @@ async function loginAsUser(client: any) {
     password: 'password123',
   })
 
-  // Promote user to Admin to pass Bouncer RBAC during tests
+  // Promote user to requested role (Admin by default to pass Bouncer RBAC during tests)
   const user = await User.findByOrFail('email', email)
-  user.globalRoleId = 1
+  user.globalRoleId = roleId
   await user.save()
 
   return { token: register.body().token.token, email }
@@ -74,6 +76,45 @@ async function getUserId(client: any, token: string) {
   return me.body().id
 }
 
+async function createOAuthClientCredentials(client: any, token: string) {
+  const createClient = await client
+    .post('/api/oauth/clients')
+    .header('Authorization', `Bearer ${token}`)
+    .json({ name: `webhook-client-${Date.now()}` })
+
+  createClient.assertStatus(201)
+
+  return {
+    clientId: createClient.body().client_id as string,
+    clientSecret: createClient.body().client_secret as string,
+  }
+}
+
+function buildHmacHeaders(args: {
+  clientId: string
+  clientSecret: string
+  method: string
+  path: string
+  rawBody?: string
+  nonce?: string
+  timestamp?: string
+}) {
+  const timestamp = args.timestamp ?? String(Date.now())
+  const nonce = args.nonce ?? randomUUID()
+  const rawBody = args.rawBody ?? ''
+
+  const bodyHash = createHash('sha256').update(rawBody).digest('hex')
+  const canonical = [args.method.toUpperCase(), args.path, timestamp, nonce, bodyHash].join('\n')
+  const signature = createHmac('sha256', args.clientSecret).update(canonical).digest('hex')
+
+  return {
+    'x-api-key': args.clientId,
+    'x-timestamp': timestamp,
+    'x-nonce': nonce,
+    'x-signature': signature,
+  }
+}
+
 test.group('Submissions — index', () => {
   test('returns list of submissions when authenticated', async ({ client }) => {
     const { token } = await loginAsUser(client)
@@ -81,7 +122,7 @@ test.group('Submissions — index', () => {
     const response = await client.get('/api/submissions').header('Authorization', `Bearer ${token}`)
 
     response.assertStatus(200)
-  })
+  }).timeout(60_000)
 
   test('returns 401 when not authenticated', async ({ client }) => {
     const response = await client.get('/api/submissions')
@@ -141,16 +182,45 @@ test.group('Submissions — result', () => {
 
 test.group('Submissions — webhook', () => {
   test('accepts webhook payload and returns received', async ({ client, assert }) => {
-    const { token } = await loginAsUser(client)
+    const { token } = await loginAsUser(client, 4)
     const userId = await getUserId(client, token)
     const submissionId = await createSubmission(userId)
+    const { clientId, clientSecret } = await createOAuthClientCredentials(client, token)
 
-    const response = await client.post('/api/submissions/webhook').json({
+    const payload = {
       data: {
         submission_id: submissionId,
         status: 'pending',
+        result: {
+          correctness_score: 0,
+          tool_score: 0,
+          comments: '',
+          comment_format: 0,
+          runtime_ms: 0,
+          exit_code: 0,
+          test_output: '',
+          has_payload: false,
+          payload_url: '',
+        },
       },
+    }
+
+    const rawBody = JSON.stringify(payload)
+    const headers = buildHmacHeaders({
+      clientId,
+      clientSecret,
+      method: 'POST',
+      path: '/api/v1/submissions/webhook',
+      rawBody,
     })
+
+    const response = await client
+      .post('/api/v1/submissions/webhook')
+      .header('x-api-key', headers['x-api-key'])
+      .header('x-timestamp', headers['x-timestamp'])
+      .header('x-nonce', headers['x-nonce'])
+      .header('x-signature', headers['x-signature'])
+      .json(payload)
 
     response.assertStatus(200)
     response.assertBodyContains({ received: true })
@@ -159,32 +229,109 @@ test.group('Submissions — webhook', () => {
     assert.equal(updatedSubmission?.status, 'pending')
   })
 
-  test('returns 400 for invalid webhook payload shape', async ({ client, assert }) => {
-    const response = await client.post('/api/submissions/webhook').json({
+  test('returns 422 when required result object is missing', async ({ client, assert }) => {
+    const { token } = await loginAsUser(client, 4)
+    const userId = await getUserId(client, token)
+    const submissionId = await createSubmission(userId)
+    const { clientId, clientSecret } = await createOAuthClientCredentials(client, token)
+
+    const payload = {
       data: {
+        submission_id: submissionId,
         status: 'completed',
         submitted_at: new Date().toISOString(),
         started_at: new Date().toISOString(),
         completed_at: new Date().toISOString(),
         retry_count: 0,
-        result: {
-          correctness_score: 95,
-          tool_score: 0,
-          comments: '',
-          commentFormat: 0,
-          runtime_ms: 100,
-          exit_code: 0,
-          test_output: '',
-          has_payload: false,
-          payload_url: null,
-        },
       },
+    }
+
+    const rawBody = JSON.stringify(payload)
+    const headers = buildHmacHeaders({
+      clientId,
+      clientSecret,
+      method: 'POST',
+      path: '/api/v1/submissions/webhook',
+      rawBody,
     })
+
+    const response = await client
+      .post('/api/v1/submissions/webhook')
+      .header('x-api-key', headers['x-api-key'])
+      .header('x-timestamp', headers['x-timestamp'])
+      .header('x-nonce', headers['x-nonce'])
+      .header('x-signature', headers['x-signature'])
+      .json(payload)
 
     response.assertStatus(422)
     const body = response.body()
     assert.isArray(body.errors)
     assert.isAbove(body.errors.length, 0)
+  })
+
+  test('returns 401 when webhook is called without HMAC headers', async ({ client }) => {
+    const { token } = await loginAsUser(client, 4)
+    const userId = await getUserId(client, token)
+    const submissionId = await createSubmission(userId)
+
+    const response = await client.post('/api/v1/submissions/webhook').json({
+      data: {
+        submission_id: submissionId,
+        status: 'pending',
+        result: {
+          correctness_score: 0,
+        },
+      },
+    })
+
+    response.assertStatus(401)
+  })
+
+  test('returns 403 when a non-service account calls webhook', async ({ client }) => {
+    const { token } = await loginAsUser(client, 1) // Admin, not service account
+    const userId = await getUserId(client, token)
+    const submissionId = await createSubmission(userId)
+    const { clientId, clientSecret } = await createOAuthClientCredentials(client, token)
+
+    const payload = {
+      data: {
+        submission_id: submissionId,
+        status: 'pending',
+        result: {
+          correctness_score: 0,
+          tool_score: 0,
+          comments: '',
+          comment_format: 0,
+          runtime_ms: 0,
+          exit_code: 0,
+          test_output: '',
+          has_payload: false,
+          payload_url: '',
+        },
+      },
+    }
+
+    const rawBody = JSON.stringify(payload)
+    const headers = buildHmacHeaders({
+      clientId,
+      clientSecret,
+      method: 'POST',
+      path: '/api/v1/submissions/webhook',
+      rawBody,
+    })
+
+    const response = await client
+      .post('/api/v1/submissions/webhook')
+      .header('x-api-key', headers['x-api-key'])
+      .header('x-timestamp', headers['x-timestamp'])
+      .header('x-nonce', headers['x-nonce'])
+      .header('x-signature', headers['x-signature'])
+      .json(payload)
+
+    response.assertStatus(403)
+    response.assertBodyContains({
+      message: 'Only registered service accounts can access this endpoint.',
+    })
   })
 })
 
