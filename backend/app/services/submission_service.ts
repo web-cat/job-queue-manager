@@ -152,6 +152,27 @@ export default class SubmissionService {
         })
         .save()
 
+      const assignment = await Assignment.findOrFail(submission.workoutId)
+      const runtimeSeconds = typeof result.runtime_ms === 'number' ? result.runtime_ms / 1000 : null
+
+      if (runtimeSeconds !== null) {
+        const currentEstimateSeconds = assignment.estimatedRuntimeSeconds ?? runtimeSeconds
+        const updatedEstimateSeconds = Math.max(
+          1,
+          Math.round((currentEstimateSeconds + runtimeSeconds) / 2)
+        )
+
+        assignment.estimatedRuntimeSeconds = updatedEstimateSeconds
+        await assignment.save()
+
+        if (assignment.dockerImageTag) {
+          await this.jobQueueService.syncRuntimeEstimateForImageTag(
+            assignment.dockerImageTag,
+            updatedEstimateSeconds
+          )
+        }
+      }
+
       if (result.has_payload && result.payload_url) {
         const fileBuffer = await this.jobQueueService.downloadPayload(result.payload_url)
 

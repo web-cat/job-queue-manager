@@ -20,8 +20,10 @@ import type { HttpContext } from '@adonisjs/core/http'
 import vine from '@vinejs/vine'
 import Assignment from '#models/assignment'
 import AssignmentOffering from '#models/assignment_offering'
+import JobQueueService from '#services/job_queue_service'
 import { DateTime } from 'luxon'
 import AssignmentPolicy from '#policies/assignment_policy'
+import logger from '@adonisjs/core/services/logger'
 
 // ── Validators ───────────────────────────────────────────────────────
 
@@ -29,6 +31,7 @@ const createAssignmentValidator = vine.compile(
   vine.object({
     name: vine.string().trim().minLength(1),
     dockerImageTag: vine.string().optional(),
+    estimatedRuntimeSeconds: vine.number().positive().optional(),
     description: vine.string().optional(),
     submissionPolicyId: vine.number().positive(),
     isPublic: vine.boolean().optional(),
@@ -41,6 +44,7 @@ const createAssignmentValidator = vine.compile(
 const updateAssignmentValidator = vine.compile(
   vine.object({
     name: vine.string().trim().minLength(1).optional(),
+    estimatedRuntimeSeconds: vine.number().positive().optional(),
     description: vine.string().optional(),
     isPublic: vine.boolean().optional(),
     scrambled: vine.boolean().optional(),
@@ -63,6 +67,25 @@ const createOfferingValidator = vine.compile(
 // ── Controller ───────────────────────────────────────────────────────
 
 export default class AssignmentsController {
+  private readonly jobQueueService = new JobQueueService()
+
+  private async syncRuntimeEstimate(assignment: Assignment) {
+    if (!assignment.dockerImageTag || assignment.estimatedRuntimeSeconds === null) {
+      return
+    }
+
+    const synced = await this.jobQueueService.syncRuntimeEstimateForImageTag(
+      assignment.dockerImageTag,
+      assignment.estimatedRuntimeSeconds
+    )
+
+    if (!synced) {
+      logger.warn(
+        `[AssignmentsController] Unable to sync runtime estimate for image ${assignment.dockerImageTag}`
+      )
+    }
+  }
+
   /**
    * GET /api/assignments
    * List all public assignments or those owned by the user
@@ -79,7 +102,10 @@ export default class AssignmentsController {
             subq
               .select('id')
               .from('course_enrollment')
-              .whereColumn('course_enrollment.course_offering_id', 'assignment_offering.course_offering_id')
+              .whereColumn(
+                'course_enrollment.course_offering_id',
+                'assignment_offering.course_offering_id'
+              )
               .where('course_enrollment.user_id', user.id)
           })
         })
@@ -131,8 +157,11 @@ export default class AssignmentsController {
 
     const assignment = await Assignment.create({
       ...data,
+      estimatedRuntimeSeconds: data.estimatedRuntimeSeconds ?? 120,
       userId: user.id,
     })
+
+    await this.syncRuntimeEstimate(assignment)
 
     return response.created(assignment)
   }
@@ -142,15 +171,15 @@ export default class AssignmentsController {
    * Update an assignment
    */
   async update({ bouncer, params, request, response }: HttpContext) {
-    const assignment = await Assignment.query()
-      .where('id', params.id)
-      .firstOrFail()
+    const assignment = await Assignment.query().where('id', params.id).firstOrFail()
 
     await bouncer.with(AssignmentPolicy).authorize('update', assignment)
 
     const data = await request.validateUsing(updateAssignmentValidator)
     assignment.merge(data)
     await assignment.save()
+
+    await this.syncRuntimeEstimate(assignment)
 
     return response.ok(assignment)
   }
@@ -160,9 +189,7 @@ export default class AssignmentsController {
    * Delete an assignment
    */
   async destroy({ bouncer, params, response }: HttpContext) {
-    const assignment = await Assignment.query()
-      .where('id', params.id)
-      .firstOrFail()
+    const assignment = await Assignment.query().where('id', params.id).firstOrFail()
 
     await bouncer.with(AssignmentPolicy).authorize('delete', assignment)
 

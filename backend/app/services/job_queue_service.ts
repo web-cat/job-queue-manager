@@ -67,10 +67,96 @@ export default class JobQueueService {
     const baseUrl = env.get('JOB_QUEUE_API_URL')
 
     if (typeof baseUrl !== 'string' || baseUrl.trim() === '') {
-      throw new Error('Missing required JOB_QUEUE_API_URL configuration for JobQueueService')
+      return ''
     }
 
     return baseUrl
+  }
+
+  private getApiKey(): string {
+    return `${env.get('JOB_QUEUE_API_KEY') || ''}`
+  }
+
+  private getRequestHeaders(): Record<string, string> {
+    return {
+      'X-API-KEY': this.getApiKey(),
+    }
+  }
+
+  async listImages(): Promise<any[] | null> {
+    if (!this.baseUrl) {
+      return null
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/images`, {
+        headers: this.getRequestHeaders(),
+      })
+
+      if (!response.ok) {
+        return null
+      }
+
+      const responseData = (await response.json().catch(() => null)) as { data?: unknown } | null
+
+      return Array.isArray(responseData?.data) ? responseData.data : null
+    } catch (error) {
+      logger.error('[JobQueueService] Failed to fetch image configs', error)
+      return null
+    }
+  }
+
+  async updateImageConfig(imageId: number, payload: Record<string, unknown>): Promise<any | null> {
+    if (!this.baseUrl) {
+      return null
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/images/${imageId}`, {
+        method: 'PUT',
+        headers: {
+          ...this.getRequestHeaders(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        return null
+      }
+
+      const responseData = (await response.json().catch(() => null)) as { data?: unknown } | null
+
+      return responseData?.data ?? null
+    } catch (error) {
+      logger.error(`[JobQueueService] Failed to update image config ${imageId}`, error)
+      return null
+    }
+  }
+
+  async syncRuntimeEstimateForImageTag(
+    imageTag: string,
+    estimatedRuntimeSeconds: number
+  ): Promise<boolean> {
+    const images = await this.listImages()
+
+    if (!images) {
+      return false
+    }
+
+    const image = images.find((entry) => entry?.docker_image_tag === imageTag)
+
+    if (!image?.id) {
+      logger.warn(`[JobQueueService] No image config found for tag ${imageTag}`)
+      return false
+    }
+
+    const updatedImage = await this.updateImageConfig(image.id, {
+      default_estimated_runtime: estimatedRuntimeSeconds,
+      avg_runtime_seconds: estimatedRuntimeSeconds,
+    })
+
+    return !!updatedImage
   }
   /**
    * Submit a job to the other team's REST API.

@@ -69,6 +69,55 @@ async function createSubmission(userId: number) {
   return submission.id
 }
 
+async function createSubmissionWithAssignmentOptions(
+  userId: number,
+  options: { dockerImageTag?: string | null; estimatedRuntimeSeconds?: number | null }
+) {
+  const [result] = await db
+    .table('submission_result')
+    .insert({ correctness_score: 0 })
+    .returning('id')
+
+  const [policy] = await db
+    .table('submission_policy')
+    .insert({
+      award_early_bonus: false,
+      deduct_late_penalty: false,
+      allow_partners: false,
+      auto_assign_partners: true,
+      deduct_excess_submission_penalty: false,
+      force_lti_clickthrough: false,
+      use_time_bank_days: false,
+      submisison_method: 0,
+    })
+    .returning('id')
+
+  const [assignment] = await db
+    .table('assignment')
+    .insert({
+      name: `Test Assignment ${Date.now()}`,
+      submission_policy_id: policy.id,
+      scrambled: false,
+      docker_image_tag: options.dockerImageTag ?? null,
+      estimated_runtime_seconds: options.estimatedRuntimeSeconds ?? 120,
+    })
+    .returning('id')
+
+  const [submission] = await db
+    .table('submission')
+    .insert({
+      user_id: userId,
+      workout_id: assignment.id,
+      submission_result_id: result.id,
+      feedback_ready: false,
+      is_submission_for_grading: true,
+      partner_link: false,
+    })
+    .returning('id')
+
+  return { submissionId: submission.id, assignmentId: assignment.id }
+}
+
 // Helper to get the current user id from token
 async function getUserId(client: any, token: string) {
   const me = await client.get('/api/auth/me').header('Authorization', `Bearer ${token}`)
@@ -226,6 +275,59 @@ test.group('Submissions — webhook', () => {
 
     const updatedSubmission = await db.from('submission').where('id', submissionId).first()
     assert.equal(updatedSubmission?.status, 'pending')
+  })
+
+  test('updates the assignment runtime estimate from webhook results', async ({
+    client,
+    assert,
+  }) => {
+    const { token } = await loginAsUser(client, 4)
+    const userId = await getUserId(client, token)
+    const { submissionId, assignmentId } = await createSubmissionWithAssignmentOptions(userId, {
+      dockerImageTag: 'webcat/java-grader:cs2114-p3',
+      estimatedRuntimeSeconds: 120,
+    })
+    const { clientId, clientSecret } = await createOAuthClientCredentials(client, token)
+
+    const payload = {
+      data: {
+        submission_id: submissionId,
+        status: 'completed',
+        result: {
+          correctness_score: 0,
+          tool_score: 0,
+          comments: '',
+          comment_format: 0,
+          runtime_ms: 8000,
+          exit_code: 0,
+          test_output: '',
+          has_payload: false,
+          payload_url: '',
+        },
+      },
+    }
+
+    const rawBody = JSON.stringify(payload)
+    const headers = buildHmacHeaders({
+      clientId,
+      clientSecret,
+      method: 'POST',
+      path: '/api/v1/submissions/webhook',
+      rawBody,
+    })
+
+    const response = await client
+      .post('/api/v1/submissions/webhook')
+      .header('x-api-key', headers['x-api-key'])
+      .header('x-timestamp', headers['x-timestamp'])
+      .header('x-nonce', headers['x-nonce'])
+      .header('x-signature', headers['x-signature'])
+      .json(payload)
+
+    response.assertStatus(200)
+
+    const updatedAssignment = await db.from('assignment').where('id', assignmentId).first()
+    assert.equal(updatedAssignment?.estimated_runtime_seconds, 64)
   })
 
   test('returns 422 when required result object is missing', async ({ client, assert }) => {

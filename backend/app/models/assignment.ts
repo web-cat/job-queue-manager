@@ -37,6 +37,9 @@ export default class Assignment extends BaseModel {
   declare dockerImageTag: string | null
 
   @column()
+  declare estimatedRuntimeSeconds: number | null
+
+  @column()
   declare description: string | null
 
   @column()
