@@ -63,25 +63,37 @@ export default class CoursesController {
     const user = auth.getUserOrFail()
     const { page = 1, limit = 20 } = request.qs()
 
-    const courses = await Course.query()
-      .where('is_hidden', false)
-      .whereHas('sections', (sectionsQuery) => {
-        sectionsQuery.whereHas('enrollments', (enrollmentsQuery) => {
-          enrollmentsQuery.where('user_id', user.id)
+    let courses
+
+    if (user.globalRoleId === 1) {
+      // Admins see all courses with all their sections
+      courses = await Course.query()
+        .preload('organization')
+        .preload('sections', (sq) => {
+          sq.preload('term')
+            .preload('enrollments', (eq) => eq.preload('courseRole'))
         })
-      })
-      .preload('organization')
-      .preload('sections', (sectionsQuery) => {
-        sectionsQuery
-          .whereHas('enrollments', (enrollmentsQuery) => {
-            enrollmentsQuery.where('user_id', user.id)
-          })
-          .preload('enrollments', (eq) => {
-            eq.where('user_id', user.id).preload('courseRole')
-          })
-      })
-      .orderBy('name', 'asc')
-      .paginate(page, limit)
+        .orderBy('name', 'asc')
+        .paginate(page, limit)
+    } else {
+      // Everyone else: only non-hidden courses they're enrolled in
+      courses = await Course.query()
+        .where('is_hidden', false)
+        .whereHas('sections', (sq) => {
+          sq.whereHas('enrollments', (eq) => eq.where('user_id', user.id))
+        })
+        .preload('organization')
+        .preload('sections', (sq) => {
+          sq
+            .whereHas('enrollments', (eq) => eq.where('user_id', user.id))
+            .preload('term')
+            .preload('enrollments', (eq) => {
+              eq.where('user_id', user.id).preload('courseRole')
+            })
+        })
+        .orderBy('name', 'asc')
+        .paginate(page, limit)
+    }
 
     return response.ok(courses)
   }

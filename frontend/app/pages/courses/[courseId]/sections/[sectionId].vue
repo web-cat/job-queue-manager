@@ -27,9 +27,15 @@ const section = computed(() => {
   return course.value?.sections?.find((s: any) => s.id === Number(sectionId));
 });
 
-const isInstructor = computed(() => {
-  return section.value?.enrollments?.[0]?.courseRoleId === 1;
-});
+
+// isInstructor: course-level role 1, OR global admin/instructor — used to gate
+// assignment create/edit UI. Mirrors the additive policy on the backend.
+const isInstructor = computed(
+  () =>
+    section.value?.enrollments?.[0]?.courseRoleId === 1 ||
+    authStore.user?.globalRoleId === 1 ||
+    authStore.user?.globalRoleId === 2
+);
 
 const { data: policies } = await useAsyncData(
   "submission-policies",
@@ -138,10 +144,6 @@ function toDatetimeLocal(iso: string | null | undefined): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// ── Edit assignment ──────────────────────────────────────────────────
-const isGlobalInstructor = computed(
-  () => authStore.user?.globalRoleId === 1 || authStore.user?.globalRoleId === 2
-);
 
 const isEditSlideoverOpen = ref(false);
 const editingAssignment = ref<any>(null);
@@ -420,7 +422,7 @@ async function saveAssignment() {
                 size="xs"
               />
               <UButton
-                v-if="isGlobalInstructor"
+                v-if="isInstructor"
                 icon="i-heroicons-pencil-square"
                 size="xs"
                 variant="ghost"
