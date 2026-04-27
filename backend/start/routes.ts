@@ -35,11 +35,13 @@ const TermsController = () => import('#controllers/terms_controller')
 const SubmissionPoliciesController = () => import('#controllers/submission_policies_controller')
 const OAuthController = () => import('#controllers/oauth_controller')
 const ExecutionServiceController = () => import('#controllers/execution_service_controller')
+const ImageManagementController = () => import('#controllers/image_management_controller')
 
 // ── Global Route Matchers ─────────────────────────────────────────────
 router.where('id', router.matchers.number())
 router.where('sectionId', router.matchers.number())
 router.where('userId', router.matchers.number())
+router.where('imageId', router.matchers.number())
 
 // ── Health check ──────────────────────────────────────────────────────
 router.get('/', async () => {
@@ -129,6 +131,12 @@ function registerApiRoutes(prefix: string = '') {
         'queuePosition',
       ])
       router.get('/administration/execution/workers', [ExecutionServiceController, 'workers'])
+      // Image management endpoints (proxies to execution service)
+      router.get('/images', [ImageManagementController, 'index'])
+      router.get('/images/:imageId', [ImageManagementController, 'show'])
+      router.post('/images', [ImageManagementController, 'store'])
+      router.put('/images/:imageId', [ImageManagementController, 'update'])
+      router.delete('/images/:imageId', [ImageManagementController, 'destroy'])
     })
     .use(middleware.admin())
 }
