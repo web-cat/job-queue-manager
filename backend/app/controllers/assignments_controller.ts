@@ -20,6 +20,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import vine from '@vinejs/vine'
 import Assignment from '#models/assignment'
 import AssignmentOffering from '#models/assignment_offering'
+import CourseEnrollment from '#models/course_enrollment'
 import { DateTime } from 'luxon'
 import AssignmentPolicy from '#policies/assignment_policy'
 import db from '@adonisjs/lucid/services/db'
@@ -46,6 +47,18 @@ const updateAssignmentValidator = vine.compile(
     isPublic: vine.boolean().optional(),
     scrambled: vine.boolean().optional(),
     pointsMultiplier: vine.number().optional(),
+    submissionPolicyId: vine.number().positive().optional(),
+  })
+)
+
+const updateOfferingValidator = vine.compile(
+  vine.object({
+    availableFrom: vine.string().optional(),
+    dueAt: vine.string().optional(),
+    acceptUntil: vine.string().optional(),
+    published: vine.boolean().optional(),
+    timeLimit: vine.number().positive().optional(),
+    attemptLimit: vine.number().positive().optional(),
   })
 )
 
@@ -72,21 +85,55 @@ export default class AssignmentsController {
     const user = auth.getUserOrFail()
     const { page = 1, limit = 20, isPublic, sectionId } = request.qs()
 
+    // Determine if the user can see unpublished offerings:
+    // global admin (1), global instructor (2), OR course-level instructor in any section
+    const hasCourseInstructorRole = !!(await CourseEnrollment.query()
+      .where('user_id', user.id)
+      .where('course_role_id', 1)
+      .first())
+    const isPrivileged = user.globalRoleId <= 2 || hasCourseInstructorRole
+
     const query = Assignment.query()
       .where((q) => {
-        q.where('is_public', true).orWhereHas('assignmentOfferings', (offeringQuery) => {
-          // Only show private assignments if the user is explicitly enrolled in the course section offering it
-          offeringQuery.whereExists((subq) => {
-            subq
-              .select('id')
-              .from('course_enrollment')
-              .whereColumn(
-                'course_enrollment.course_offering_id',
-                'assignment_offering.course_offering_id'
-              )
-              .where('course_enrollment.user_id', user.id)
+        if (isPrivileged) {
+          // Admins and instructors — show public OR enrolled, regardless of published
+          q.where('is_public', true).orWhereHas('assignmentOfferings', (offeringQuery) => {
+            offeringQuery.whereExists((subq) => {
+              subq
+                .select('id')
+                .from('course_enrollment')
+                .whereColumn(
+                  'course_enrollment.course_offering_id',
+                  'assignment_offering.course_offering_id'
+                )
+                .where('course_enrollment.user_id', user.id)
+            })
           })
-        })
+        } else {
+          // Students — must have a published offering to see it
+          q
+            .where((sq) => {
+              // Public assignments: only if at least one offering is published
+              sq
+                .where('is_public', true)
+                .whereHas('assignmentOfferings', (oq) => oq.where('published', true))
+            })
+            .orWhereHas('assignmentOfferings', (offeringQuery) => {
+              // Enrolled sections: only published offerings
+              offeringQuery
+                .where('published', true)
+                .whereExists((subq) => {
+                  subq
+                    .select('id')
+                    .from('course_enrollment')
+                    .whereColumn(
+                      'course_enrollment.course_offering_id',
+                      'assignment_offering.course_offering_id'
+                    )
+                    .where('course_enrollment.user_id', user.id)
+                })
+            })
+        }
       })
       .preload('submissionPolicy')
       .orderBy('created_at', 'desc')
@@ -96,9 +143,17 @@ export default class AssignmentsController {
     }
 
     if (sectionId) {
-      query.whereHas('assignmentOfferings', (q) => {
-        q.where('course_offering_id', sectionId)
-      })
+      query
+        .whereHas('assignmentOfferings', (q) => {
+          q.where('course_offering_id', sectionId)
+          // Only privileged users (admins, global instructors, course instructors) see unpublished
+          if (!isPrivileged) {
+            q.where('published', true)
+          }
+        })
+        .preload('assignmentOfferings', (q) => {
+          q.where('course_offering_id', sectionId)
+        })
     }
 
     const assignments = await query.paginate(page, limit)
@@ -185,6 +240,34 @@ export default class AssignmentsController {
       .orderBy('due_at', 'asc')
 
     return response.ok(offerings)
+  }
+
+  /**
+   * PATCH /api/assignments/:id/offerings/:offeringId
+   * Update an existing offering's dates, limits, and published state
+   */
+  async updateOffering({ bouncer, params, request, response }: HttpContext) {
+    const assignment = await Assignment.findOrFail(params.id)
+    await bouncer.with(AssignmentPolicy).authorize('update', assignment)
+
+    const offering = await AssignmentOffering.query()
+      .where('id', params.offeringId)
+      .where('assignment_id', params.id)
+      .firstOrFail()
+
+    const data = await request.validateUsing(updateOfferingValidator)
+
+    offering.merge({
+      availableFrom: data.availableFrom ? DateTime.fromISO(data.availableFrom) : offering.availableFrom,
+      dueAt: data.dueAt ? DateTime.fromISO(data.dueAt) : offering.dueAt,
+      acceptUntil: data.acceptUntil ? DateTime.fromISO(data.acceptUntil) : offering.acceptUntil,
+      published: data.published ?? offering.published,
+      timeLimit: data.timeLimit ?? offering.timeLimit,
+      attemptLimit: data.attemptLimit ?? offering.attemptLimit,
+    })
+    await offering.save()
+
+    return response.ok(offering)
   }
 
   /**

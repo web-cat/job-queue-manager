@@ -39,6 +39,7 @@ const OAuthController = () => import('#controllers/oauth_controller')
 router.where('id', router.matchers.number())
 router.where('sectionId', router.matchers.number())
 router.where('userId', router.matchers.number())
+router.where('offeringId', router.matchers.number())
 
 // ── Health check ──────────────────────────────────────────────────────
 router.get('/', async () => {
@@ -105,6 +106,7 @@ function registerApiRoutes(prefix: string = '') {
   // Assignments
   router.get('/assignments/:id/offerings', [AssignmentsController, 'offerings'])
   router.post('/assignments/:id/offerings', [AssignmentsController, 'createOffering'])
+  router.patch('/assignments/:id/offerings/:offeringId', [AssignmentsController, 'updateOffering'])
   router.resource('assignments', AssignmentsController).apiOnly().as(`${prefix}assignments`)
   router.get('/assignments/:id/wait-time', [AssignmentsController, 'waitTime'])
 

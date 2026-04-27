@@ -2,8 +2,9 @@
 definePageMeta({ middleware: "auth" });
 
 const route = useRoute();
-const { get, post } = useApi();
+const { get, post, patch } = useApi();
 const toast = useToast();
+const authStore = useAuthStore();
 
 const courseId = route.params.courseId;
 const sectionId = route.params.sectionId;
@@ -26,9 +27,15 @@ const section = computed(() => {
   return course.value?.sections?.find((s: any) => s.id === Number(sectionId));
 });
 
-const isInstructor = computed(() => {
-  return section.value?.enrollments?.[0]?.courseRoleId === 1;
-});
+
+// isInstructor: course-level role 1, OR global admin/instructor — used to gate
+// assignment create/edit UI. Mirrors the additive policy on the backend.
+const isInstructor = computed(
+  () =>
+    section.value?.enrollments?.[0]?.courseRoleId === 1 ||
+    authStore.user?.globalRoleId === 1 ||
+    authStore.user?.globalRoleId === 2
+);
 
 const { data: policies } = await useAsyncData(
   "submission-policies",
@@ -46,7 +53,11 @@ const assignmentState = ref({
   description: "",
   submissionPolicyId: null as number | null,
   isPublic: true,
-  published: true
+  published: true,
+  availableFrom: "",
+  dueAt: "",
+  attemptLimit: null as number | null,
+  isUnlimitedAttempts: true
 });
 
 async function createAssignment() {
@@ -65,7 +76,10 @@ async function createAssignment() {
     
     await post(`/assignments/${asm.id}/offerings`, {
       courseOfferingId: Number(sectionId),
-      published: assignmentState.value.published
+      published: assignmentState.value.published,
+      availableFrom: assignmentState.value.availableFrom ? new Date(assignmentState.value.availableFrom).toISOString() : undefined,
+      dueAt: assignmentState.value.dueAt ? new Date(assignmentState.value.dueAt).toISOString() : undefined,
+      attemptLimit: assignmentState.value.isUnlimitedAttempts ? undefined : (assignmentState.value.attemptLimit || undefined)
     });
     
     toast.add({ title: "Success", description: "Assignment created & offered.", color: "green" });
@@ -77,7 +91,11 @@ async function createAssignment() {
       description: "",
       submissionPolicyId: null,
       isPublic: true,
-      published: true
+      published: true,
+      availableFrom: "",
+      dueAt: "",
+      attemptLimit: null,
+      isUnlimitedAttempts: true
     };
     
     // Refresh assignments list
@@ -99,6 +117,102 @@ const filtered = computed(() => {
       a.description?.toLowerCase().includes(q),
   );
 });
+
+// ── Due date helpers ─────────────────────────────────────────────────
+function formatDueDate(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return d.toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  });
+}
+
+function dueUrgency(iso: string | null | undefined): 'past' | 'soon' | 'ok' | null {
+  if (!iso) return null;
+  const diff = new Date(iso).getTime() - Date.now();
+  if (diff < 0) return 'past';
+  if (diff < 48 * 60 * 60 * 1000) return 'soon';
+  return 'ok';
+}
+
+/** Convert ISO/DB datetime string → datetime-local input value (YYYY-MM-DDTHH:mm) in local timezone */
+function toDatetimeLocal(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+
+const isEditSlideoverOpen = ref(false);
+const editingAssignment = ref<any>(null);
+const editState = ref({
+  name: '',
+  description: '',
+  submissionPolicyId: null as number | null,
+  isPublic: true,
+  published: true,
+  availableFrom: '',
+  dueAt: '',
+  attemptLimit: null as number | null,
+  isUnlimitedAttempts: true,
+});
+
+function openEditSlideover(assignment: any) {
+  const offering = assignment.assignmentOfferings?.[0];
+  editingAssignment.value = assignment;
+  editState.value = {
+    name: assignment.name ?? '',
+    description: assignment.description ?? '',
+    submissionPolicyId: assignment.submissionPolicyId ?? null,
+    isPublic: assignment.isPublic ?? true,
+    published: offering?.published ?? true,
+    availableFrom: toDatetimeLocal(offering?.availableFrom),
+    dueAt: toDatetimeLocal(offering?.dueAt),
+    attemptLimit: offering?.attemptLimit ?? null,
+    isUnlimitedAttempts: !offering?.attemptLimit,
+  };
+  isEditSlideoverOpen.value = true;
+}
+
+async function saveAssignment() {
+  if (!editingAssignment.value) return;
+  const id = editingAssignment.value.id;
+
+  try {
+    // 1. Update shared assignment fields
+    await patch(`/assignments/${id}`, {
+      name: editState.value.name,
+      description: editState.value.description || undefined,
+      submissionPolicyId: editState.value.submissionPolicyId ?? undefined,
+      isPublic: editState.value.isPublic,
+    });
+
+    // 2. Update section-specific offering (dates, limits, published)
+    const offeringId = editingAssignment.value.assignmentOfferings?.[0]?.id;
+    if (offeringId) {
+      await patch(`/assignments/${id}/offerings/${offeringId}`, {
+        availableFrom: editState.value.availableFrom || undefined,
+        dueAt: editState.value.dueAt || undefined,
+        published: editState.value.published,
+        attemptLimit: editState.value.isUnlimitedAttempts
+          ? undefined
+          : (editState.value.attemptLimit ?? undefined),
+      });
+    }
+
+    toast.add({ title: 'Saved', description: 'Assignment updated.', color: 'success' });
+    isEditSlideoverOpen.value = false;
+    refreshNuxtData(`section-${sectionId}-assignments`);
+  } catch (e: any) {
+    toast.add({
+      title: 'Save failed',
+      description: e?.data?.message ?? e?.message ?? 'Please try again.',
+      color: 'error',
+    });
+  }
+}
 </script>
 
 <template>
@@ -216,6 +330,30 @@ const filtered = computed(() => {
                       required
                     />
                   </UFormField>
+
+                  <div class="grid grid-cols-2 gap-4">
+                    <UFormField label="Available From (Optional)">
+                      <UInput v-model="assignmentState.availableFrom" type="datetime-local" />
+                    </UFormField>
+                    <UFormField label="Due At (Optional)">
+                      <UInput v-model="assignmentState.dueAt" type="datetime-local" />
+                    </UFormField>
+                  </div>
+                  
+                  <UFormField label="Attempt Limit">
+                    <div class="flex items-center gap-4">
+                      <UCheckbox v-model="assignmentState.isUnlimitedAttempts" label="Unlimited" />
+                      <UInput 
+                        v-if="!assignmentState.isUnlimitedAttempts"
+                        v-model="assignmentState.attemptLimit" 
+                        type="number" 
+                        min="1" 
+                        placeholder="Limit" 
+                        class="w-24" 
+                        required 
+                      />
+                    </div>
+                  </UFormField>
                   
                   <div class="flex flex-col gap-3 mt-2">
                     <UCheckbox v-model="assignmentState.isPublic" label="Is Public (Visible in global catalog)" />
@@ -276,12 +414,23 @@ const filtered = computed(() => {
                 class="w-5 h-5 text-[#861F41]"
               />
             </div>
-            <UBadge
-              :label="assignment.isPublic ? 'Public' : 'Private'"
-              :color="assignment.isPublic ? 'success' : 'neutral'"
-              variant="soft"
-              size="xs"
-            />
+            <div class="flex items-center gap-2">
+              <UBadge
+                :label="assignment.isPublic ? 'Public' : 'Private'"
+                :color="assignment.isPublic ? 'success' : 'neutral'"
+                variant="soft"
+                size="xs"
+              />
+              <UButton
+                v-if="isInstructor"
+                icon="i-heroicons-pencil-square"
+                size="xs"
+                variant="ghost"
+                color="neutral"
+                title="Edit assignment"
+                @click.prevent.stop="openEditSlideover(assignment)"
+              />
+            </div>
           </div>
 
           <h3
@@ -291,11 +440,28 @@ const filtered = computed(() => {
           </h3>
           <p
             v-if="assignment.description"
-            class="text-sm text-gray-500 dark:text-gray-400 line-clamp-3 mb-4 flex-grow"
+            class="text-sm text-gray-500 dark:text-gray-400 line-clamp-3 mb-3 flex-grow"
           >
             {{ assignment.description }}
           </p>
           <div v-else class="flex-grow"></div>
+
+          <!-- Due date -->
+          <div
+            v-if="assignment.assignmentOfferings?.[0]?.dueAt"
+            class="flex items-center gap-1.5 text-xs font-medium mb-3"
+            :class="{
+              'text-red-500 dark:text-red-400': dueUrgency(assignment.assignmentOfferings[0].dueAt) === 'past',
+              'text-amber-500 dark:text-amber-400': dueUrgency(assignment.assignmentOfferings[0].dueAt) === 'soon',
+              'text-gray-400 dark:text-gray-500': dueUrgency(assignment.assignmentOfferings[0].dueAt) === 'ok',
+            }"
+          >
+            <UIcon name="i-heroicons-clock" class="w-3.5 h-3.5 shrink-0" />
+            <span>
+              {{ dueUrgency(assignment.assignmentOfferings[0].dueAt) === 'past' ? 'Was due' : 'Due' }}
+              {{ formatDueDate(assignment.assignmentOfferings[0].dueAt) }}
+            </span>
+          </div>
 
           <div
             class="flex items-center justify-between text-xs text-gray-400 font-mono mt-auto pt-4 border-t border-gray-100 dark:border-gray-800"
@@ -311,6 +477,85 @@ const filtered = computed(() => {
       </div>
     </div>
 
+    <!-- Edit Assignment Slideover -->
+    <USlideover v-model:open="isEditSlideoverOpen">
+      <template #content>
+        <div class="p-4 flex-1 overflow-y-auto bg-white dark:bg-gray-900">
+          <div class="flex items-center justify-between mb-6">
+            <h3 class="text-xl font-semibold text-gray-900 dark:text-white">
+              Edit Assignment
+            </h3>
+            <UButton
+              color="neutral"
+              variant="ghost"
+              icon="i-heroicons-x-mark"
+              @click="isEditSlideoverOpen = false"
+            />
+          </div>
+
+          <UForm :state="editState" @submit="saveAssignment" class="flex flex-col gap-5">
+            <div class="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-lg mb-2">
+              <div class="text-sm text-amber-700 dark:text-amber-300">
+                <span class="font-semibold">Editing:</span> {{ editingAssignment?.name }}<br />
+                <span class="font-semibold">Section:</span> {{ section?.label ?? `Section ${section?.id}` }}
+              </div>
+            </div>
+
+            <UFormField label="Assignment Name">
+              <UInput v-model="editState.name" required placeholder="e.g. Project 1" />
+            </UFormField>
+
+            <UFormField label="Description (Optional)">
+              <UTextarea v-model="editState.description" rows="3" placeholder="Brief details about the assignment..." />
+            </UFormField>
+
+            <UFormField label="Submission Policy">
+              <USelectMenu
+                v-model="editState.submissionPolicyId"
+                :items="policies || []"
+                value-key="id"
+                label-key="name"
+                placeholder="Select Policy"
+              />
+            </UFormField>
+
+            <div class="grid grid-cols-2 gap-4">
+              <UFormField label="Available From (Optional)">
+                <UInput v-model="editState.availableFrom" type="datetime-local" />
+              </UFormField>
+              <UFormField label="Due At (Optional)">
+                <UInput v-model="editState.dueAt" type="datetime-local" />
+              </UFormField>
+            </div>
+
+            <UFormField label="Attempt Limit">
+              <div class="flex items-center gap-4">
+                <UCheckbox v-model="editState.isUnlimitedAttempts" label="Unlimited" />
+                <UInput
+                  v-if="!editState.isUnlimitedAttempts"
+                  v-model="editState.attemptLimit"
+                  type="number"
+                  min="1"
+                  placeholder="Limit"
+                  class="w-24"
+                  required
+                />
+              </div>
+            </UFormField>
+
+            <div class="flex flex-col gap-3 mt-2">
+              <UCheckbox v-model="editState.isPublic" label="Is Public (Visible in global catalog)" />
+              <UCheckbox v-model="editState.published" label="Published (Active for this section)" />
+            </div>
+
+            <div class="mt-6 flex justify-end gap-3">
+              <UButton variant="ghost" color="neutral" @click="isEditSlideoverOpen = false">Cancel</UButton>
+              <UButton type="submit" color="primary">Save Changes</UButton>
+            </div>
+          </UForm>
+        </div>
+      </template>
+    </USlideover>
 
   </div>
 </template>

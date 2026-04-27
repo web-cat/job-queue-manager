@@ -5,8 +5,20 @@ import CourseEnrollment from '#models/course_enrollment'
 import { BasePolicy } from '@adonisjs/bouncer'
 
 export default class AssignmentPolicy extends BasePolicy {
+  /** Returns true if the user is an instructor (courseRoleId=1) in any section */
+  private async isAnySectionInstructor(userId: number): Promise<boolean> {
+    const enrollment = await CourseEnrollment.query()
+      .where('user_id', userId)
+      .where('course_role_id', 1)
+      .first()
+    return !!enrollment
+  }
+
   async create(user: User) {
-    return user.globalRoleId === 1 || user.globalRoleId === 2
+    // Existing: global admin or global instructor
+    if (user.globalRoleId === 1 || user.globalRoleId === 2) return true
+    // Additive: course-level instructor in any section
+    return this.isAnySectionInstructor(user.id)
   }
 
   async view(user: User, assignment: Assignment) {
@@ -27,8 +39,21 @@ export default class AssignmentPolicy extends BasePolicy {
   }
 
   async update(user: User, assignment: Assignment) {
-    if (user.globalRoleId === 1) return true
-    return assignment.userId === user.id
+    // Existing: global admin or global instructor
+    if (user.globalRoleId === 1 || user.globalRoleId === 2) return true
+    // Existing: assignment creator
+    if (assignment.userId === user.id) return true
+    // Additive: course instructor in any section that offers this assignment
+    const enrollment = await CourseEnrollment.query()
+      .where('user_id', user.id)
+      .where('course_role_id', 1)
+      .whereHas('section', (q) => {
+        q.whereHas('assignmentOfferings', (aq) => {
+          aq.where('assignment_id', assignment.id)
+        })
+      })
+      .first()
+    return !!enrollment
   }
 
   async delete(user: User, assignment: Assignment) {
