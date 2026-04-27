@@ -46,7 +46,11 @@ const assignmentState = ref({
   description: "",
   submissionPolicyId: null as number | null,
   isPublic: true,
-  published: true
+  published: true,
+  availableFrom: "",
+  dueAt: "",
+  attemptLimit: null as number | null,
+  isUnlimitedAttempts: true
 });
 
 async function createAssignment() {
@@ -65,7 +69,10 @@ async function createAssignment() {
     
     await post(`/assignments/${asm.id}/offerings`, {
       courseOfferingId: Number(sectionId),
-      published: assignmentState.value.published
+      published: assignmentState.value.published,
+      availableFrom: assignmentState.value.availableFrom ? new Date(assignmentState.value.availableFrom).toISOString() : undefined,
+      dueAt: assignmentState.value.dueAt ? new Date(assignmentState.value.dueAt).toISOString() : undefined,
+      attemptLimit: assignmentState.value.isUnlimitedAttempts ? undefined : (assignmentState.value.attemptLimit || undefined)
     });
     
     toast.add({ title: "Success", description: "Assignment created & offered.", color: "green" });
@@ -77,7 +84,11 @@ async function createAssignment() {
       description: "",
       submissionPolicyId: null,
       isPublic: true,
-      published: true
+      published: true,
+      availableFrom: "",
+      dueAt: "",
+      attemptLimit: null,
+      isUnlimitedAttempts: true
     };
     
     // Refresh assignments list
@@ -99,6 +110,23 @@ const filtered = computed(() => {
       a.description?.toLowerCase().includes(q),
   );
 });
+
+function formatDueDate(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return d.toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  });
+}
+
+function dueUrgency(iso: string | null | undefined): 'past' | 'soon' | 'ok' | null {
+  if (!iso) return null;
+  const diff = new Date(iso).getTime() - Date.now();
+  if (diff < 0) return 'past';
+  if (diff < 48 * 60 * 60 * 1000) return 'soon';
+  return 'ok';
+}
 </script>
 
 <template>
@@ -216,6 +244,30 @@ const filtered = computed(() => {
                       required
                     />
                   </UFormField>
+
+                  <div class="grid grid-cols-2 gap-4">
+                    <UFormField label="Available From (Optional)">
+                      <UInput v-model="assignmentState.availableFrom" type="datetime-local" />
+                    </UFormField>
+                    <UFormField label="Due At (Optional)">
+                      <UInput v-model="assignmentState.dueAt" type="datetime-local" />
+                    </UFormField>
+                  </div>
+                  
+                  <UFormField label="Attempt Limit">
+                    <div class="flex items-center gap-4">
+                      <UCheckbox v-model="assignmentState.isUnlimitedAttempts" label="Unlimited" />
+                      <UInput 
+                        v-if="!assignmentState.isUnlimitedAttempts"
+                        v-model="assignmentState.attemptLimit" 
+                        type="number" 
+                        min="1" 
+                        placeholder="Limit" 
+                        class="w-24" 
+                        required 
+                      />
+                    </div>
+                  </UFormField>
                   
                   <div class="flex flex-col gap-3 mt-2">
                     <UCheckbox v-model="assignmentState.isPublic" label="Is Public (Visible in global catalog)" />
@@ -291,11 +343,28 @@ const filtered = computed(() => {
           </h3>
           <p
             v-if="assignment.description"
-            class="text-sm text-gray-500 dark:text-gray-400 line-clamp-3 mb-4 flex-grow"
+            class="text-sm text-gray-500 dark:text-gray-400 line-clamp-3 mb-3 flex-grow"
           >
             {{ assignment.description }}
           </p>
           <div v-else class="flex-grow"></div>
+
+          <!-- Due date -->
+          <div
+            v-if="assignment.assignmentOfferings?.[0]?.dueAt"
+            class="flex items-center gap-1.5 text-xs font-medium mb-3"
+            :class="{
+              'text-red-500 dark:text-red-400': dueUrgency(assignment.assignmentOfferings[0].dueAt) === 'past',
+              'text-amber-500 dark:text-amber-400': dueUrgency(assignment.assignmentOfferings[0].dueAt) === 'soon',
+              'text-gray-400 dark:text-gray-500': dueUrgency(assignment.assignmentOfferings[0].dueAt) === 'ok',
+            }"
+          >
+            <UIcon name="i-heroicons-clock" class="w-3.5 h-3.5 shrink-0" />
+            <span>
+              {{ dueUrgency(assignment.assignmentOfferings[0].dueAt) === 'past' ? 'Was due' : 'Due' }}
+              {{ formatDueDate(assignment.assignmentOfferings[0].dueAt) }}
+            </span>
+          </div>
 
           <div
             class="flex items-center justify-between text-xs text-gray-400 font-mono mt-auto pt-4 border-t border-gray-100 dark:border-gray-800"
