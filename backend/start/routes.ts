@@ -34,6 +34,7 @@ const UsersController = () => import('#controllers/users_controller')
 const TermsController = () => import('#controllers/terms_controller')
 const SubmissionPoliciesController = () => import('#controllers/submission_policies_controller')
 const OAuthController = () => import('#controllers/oauth_controller')
+const ExecutionServiceController = () => import('#controllers/execution_service_controller')
 
 // ── Global Route Matchers ─────────────────────────────────────────────
 router.where('id', router.matchers.number())
@@ -118,6 +119,16 @@ function registerApiRoutes(prefix: string = '') {
       router.patch('/users/:id/role', [UsersController, 'updateRole'])
       router.get('/terms', [TermsController, 'index'])
       router.post('/terms', [TermsController, 'store'])
+      // Execution service / queue administration endpoints
+      router.get('/administration/execution/queue/status', [
+        ExecutionServiceController,
+        'queueStatus',
+      ])
+      router.get('/administration/execution/queue/position/:jobId', [
+        ExecutionServiceController,
+        'queuePosition',
+      ])
+      router.get('/administration/execution/workers', [ExecutionServiceController, 'workers'])
     })
     .use(middleware.admin())
 }

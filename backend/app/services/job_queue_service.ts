@@ -152,11 +152,53 @@ export default class JobQueueService {
   }
 
   /**
+   * Get overall queue status (pending/processing counts, active workers, etc.)
+   */
+  async getQueueStatus(): Promise<any | null> {
+    try {
+      const response = await fetch(`${this.baseUrl}/queue/status`)
+      if (!response.ok) return null
+      return await response.json()
+    } catch (error) {
+      logger.error('[JobQueueService] Failed to fetch queue status', error)
+      return null
+    }
+  }
+
+  /**
+   * Get HRRN position and metadata for a job in the remote queue
+   */
+  async getQueuePosition(jobId: number): Promise<any | null> {
+    try {
+      const response = await fetch(`${this.baseUrl}/queue/position/${jobId}`)
+      if (!response.ok) return null
+      return await response.json()
+    } catch (error) {
+      logger.error(`[JobQueueService] Failed to fetch queue position for job ${jobId}`, error)
+      return null
+    }
+  }
+
+  /**
+   * List active worker nodes / agents in the execution cluster
+   */
+  async listWorkers(): Promise<any | null> {
+    try {
+      const response = await fetch(`${this.baseUrl}/workers`)
+      if (!response.ok) return null
+      return await response.json()
+    } catch (error) {
+      logger.error('[JobQueueService] Failed to fetch worker list', error)
+      return null
+    }
+  }
+
+  /**
    * Downloads the artifact payload from the execution cluster.
    */
   async downloadPayload(payloadUrl: string): Promise<Buffer | null> {
     try {
-      // 1. Fetch the zip file from their cluster
+      // Fetch the zip file from their cluster
       // Note: payloadUrl is likely a relative path like "/jobs/142/payload"
       const response = await fetch(`${this.baseUrl}${payloadUrl}`)
 
@@ -165,7 +207,7 @@ export default class JobQueueService {
         return null
       }
 
-      // 2. Read the raw binary data into a Node.js Buffer
+      // Read the raw binary data into a Node.js Buffer
       const arrayBuffer = await response.arrayBuffer()
       return Buffer.from(arrayBuffer)
     } catch (error) {
