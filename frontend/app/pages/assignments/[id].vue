@@ -185,9 +185,9 @@ async function handleSubmit() {
               class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 flex items-center gap-6 text-sm text-gray-500 font-mono"
             >
               <span>ID: {{ assignment.id }}</span>
-              <span v-if="assignment.submissionPolicy">
+              <span>
                 Max attempts:
-                {{ assignment.submissionPolicy.maxSubmissions ?? "∞" }}
+                {{ offering?.attemptLimit ?? assignment.submissionPolicy?.maxSubmits ?? "∞" }}
               </span>
               <span
                 v-if="offering?.dueAt"

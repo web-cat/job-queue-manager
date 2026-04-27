@@ -86,19 +86,45 @@ export default class AssignmentsController {
 
     const query = Assignment.query()
       .where((q) => {
-        q.where('is_public', true).orWhereHas('assignmentOfferings', (offeringQuery) => {
-          // Only show private assignments if the user is explicitly enrolled in the course section offering it
-          offeringQuery.whereExists((subq) => {
-            subq
-              .select('id')
-              .from('course_enrollment')
-              .whereColumn(
-                'course_enrollment.course_offering_id',
-                'assignment_offering.course_offering_id'
-              )
-              .where('course_enrollment.user_id', user.id)
+        if (user.globalRoleId <= 2) {
+          // Admins and instructors — show public OR enrolled, regardless of published
+          q.where('is_public', true).orWhereHas('assignmentOfferings', (offeringQuery) => {
+            offeringQuery.whereExists((subq) => {
+              subq
+                .select('id')
+                .from('course_enrollment')
+                .whereColumn(
+                  'course_enrollment.course_offering_id',
+                  'assignment_offering.course_offering_id'
+                )
+                .where('course_enrollment.user_id', user.id)
+            })
           })
-        })
+        } else {
+          // Students — must have a published offering to see it
+          q
+            .where((sq) => {
+              // Public assignments: only if at least one offering is published
+              sq
+                .where('is_public', true)
+                .whereHas('assignmentOfferings', (oq) => oq.where('published', true))
+            })
+            .orWhereHas('assignmentOfferings', (offeringQuery) => {
+              // Enrolled sections: only published offerings
+              offeringQuery
+                .where('published', true)
+                .whereExists((subq) => {
+                  subq
+                    .select('id')
+                    .from('course_enrollment')
+                    .whereColumn(
+                      'course_enrollment.course_offering_id',
+                      'assignment_offering.course_offering_id'
+                    )
+                    .where('course_enrollment.user_id', user.id)
+                })
+            })
+        }
       })
       .preload('submissionPolicy')
       .orderBy('created_at', 'desc')
@@ -111,6 +137,10 @@ export default class AssignmentsController {
       query
         .whereHas('assignmentOfferings', (q) => {
           q.where('course_offering_id', sectionId)
+          // Students only see published offerings; instructors/admins see all
+          if (user.globalRoleId > 2) {
+            q.where('published', true)
+          }
         })
         .preload('assignmentOfferings', (q) => {
           q.where('course_offering_id', sectionId)

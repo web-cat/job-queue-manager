@@ -130,11 +130,12 @@ function dueUrgency(iso: string | null | undefined): 'past' | 'soon' | 'ok' | nu
   return 'ok';
 }
 
-/** Convert ISO/DB datetime string → datetime-local input value (YYYY-MM-DDTHH:mm) */
+/** Convert ISO/DB datetime string → datetime-local input value (YYYY-MM-DDTHH:mm) in local timezone */
 function toDatetimeLocal(iso: string | null | undefined): string {
   if (!iso) return '';
-  // Slice to 'YYYY-MM-DDTHH:mm'
-  return new Date(iso).toISOString().slice(0, 16);
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 // ── Edit assignment ──────────────────────────────────────────────────
