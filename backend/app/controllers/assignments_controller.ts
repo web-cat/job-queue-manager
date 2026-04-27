@@ -20,6 +20,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import vine from '@vinejs/vine'
 import Assignment from '#models/assignment'
 import AssignmentOffering from '#models/assignment_offering'
+import CourseEnrollment from '#models/course_enrollment'
 import { DateTime } from 'luxon'
 import AssignmentPolicy from '#policies/assignment_policy'
 import db from '@adonisjs/lucid/services/db'
@@ -84,9 +85,17 @@ export default class AssignmentsController {
     const user = auth.getUserOrFail()
     const { page = 1, limit = 20, isPublic, sectionId } = request.qs()
 
+    // Determine if the user can see unpublished offerings:
+    // global admin (1), global instructor (2), OR course-level instructor in any section
+    const hasCourseInstructorRole = !!(await CourseEnrollment.query()
+      .where('user_id', user.id)
+      .where('course_role_id', 1)
+      .first())
+    const isPrivileged = user.globalRoleId <= 2 || hasCourseInstructorRole
+
     const query = Assignment.query()
       .where((q) => {
-        if (user.globalRoleId <= 2) {
+        if (isPrivileged) {
           // Admins and instructors — show public OR enrolled, regardless of published
           q.where('is_public', true).orWhereHas('assignmentOfferings', (offeringQuery) => {
             offeringQuery.whereExists((subq) => {
@@ -137,8 +146,8 @@ export default class AssignmentsController {
       query
         .whereHas('assignmentOfferings', (q) => {
           q.where('course_offering_id', sectionId)
-          // Students only see published offerings; instructors/admins see all
-          if (user.globalRoleId > 2) {
+          // Only privileged users (admins, global instructors, course instructors) see unpublished
+          if (!isPrivileged) {
             q.where('published', true)
           }
         })
