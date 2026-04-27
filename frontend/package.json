@@ -19,5 +19,8 @@
     "tailwindcss": "^4.2.2",
     "vue": "^3.5.30",
     "vue-router": "^5.0.3"
+  },
+  "devDependencies": {
+    "@iconify-json/heroicons": "^1.2.3"
   }
 }
