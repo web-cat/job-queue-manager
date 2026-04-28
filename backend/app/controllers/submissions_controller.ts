@@ -26,10 +26,8 @@
 // 1. Uncomment job_queue_service.enqueue() once other team confirms endpoint
 // 2. Implement webhook() to process result callbacks and update submission_result
 //    with actual scores from the grading system
-// 3. The result() method returns submission.score — this is a column on the
-//    submission table itself (not submission_result). Confirm with other team
-//    whether they write scores to submission.score or submission_result.correctness_score
-//    and update accordingly.
+// 3. The result() method now reads the nested submission_result row.
+//    Keep the response shape aligned with frontend score displays.
 // 4. file_path on submission stores the MinIO object key, not a local path.
 //    Format: submissions/{submissionId}/input/{originalFilename}
 
@@ -97,6 +95,7 @@ export default class SubmissionsController {
     // Query all submissions matching the filters
     const query = Submission.query()
       .preload('assignmentOffering', (q) => q.preload('assignment'))
+      .preload('submissionResult')
       .orderBy('created_at', 'desc')
 
     if (assignmentOfferingId) {
@@ -140,6 +139,7 @@ export default class SubmissionsController {
     const submission = await Submission.query()
       .where('id', params.id)
       .preload('assignmentOffering', (q) => q.preload('assignment'))
+      .preload('submissionResult')
       .firstOrFail()
 
     await bouncer.with(SubmissionPolicy).authorize('view', submission)
@@ -208,16 +208,15 @@ export default class SubmissionsController {
     }
   }
 
-  /**
-   * GET /api/submissions/:id/result
-   * Get the grading result for a submission.
-   * Returns { ready: false } while grading is in progress.
-   *
-   * NOTE: score is read from submission.score — confirm with other team
-   * whether they write to this column or to submission_result.correctness_score.
-   */
+  // GET /api/submissions/:id/result
+  // Get the grading result for a submission.
+  // Returns { ready: false } while grading is in progress.
+  // Grading details are read from submission_result.
   async result({ bouncer, params, response }: HttpContext) {
-    const submission = await Submission.query().where('id', params.id).firstOrFail()
+    const submission = await Submission.query()
+      .where('id', params.id)
+      .preload('submissionResult')
+      .firstOrFail()
 
     await bouncer.with(SubmissionPolicy).authorize('view', submission)
 
@@ -228,6 +227,7 @@ export default class SubmissionsController {
     return response.ok({
       ready: true,
       submissionId: submission.id,
+      submissionResult: submission.submissionResult,
     })
   }
 
@@ -238,7 +238,7 @@ export default class SubmissionsController {
   async update({ bouncer, params, request, response }: HttpContext) {
     await bouncer.with(SubmissionPolicy).authorize('update')
     const submission = await Submission.findOrFail(params.id)
-    const data = request.only(['feedbackReady', 'score'])
+    const data = request.only(['feedbackReady'])
     await submission.merge(data).save()
     return response.ok(submission)
   }

@@ -10,9 +10,14 @@ const { data: assignment, pending } = await useAsyncData(
   () => get<any>(`/assignments/${route.params.id}`),
 );
 
-const { data: submissions, pending: pendingSubmissions, refresh: refreshSubmissions } = await useAsyncData(
-  `assignment-${route.params.id}-submissions`,
-  () => get<{ data: any[] }>(`/submissions?workoutId=${route.params.id}`).then(r => r.data).catch(() => [])
+const {
+  data: submissions,
+  pending: pendingSubmissions,
+  refresh: refreshSubmissions,
+} = await useAsyncData(`assignment-${route.params.id}-submissions`, () =>
+  get<{ data: any[] }>(`/submissions?workoutId=${route.params.id}`)
+    .then((r) => r.data)
+    .catch(() => []),
 );
 
 const submitting = ref(false);
@@ -23,9 +28,11 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const selectedFile = ref<File | null>(null);
 
 function isValidZip(file: File): boolean {
-  return file.name.toLowerCase().endsWith(".zip") || 
-         file.type === "application/zip" || 
-         file.type === "application/x-zip-compressed";
+  return (
+    file.name.toLowerCase().endsWith(".zip") ||
+    file.type === "application/zip" ||
+    file.type === "application/x-zip-compressed"
+  );
 }
 
 function handleFileChange(event: Event) {
@@ -35,7 +42,11 @@ function handleFileChange(event: Event) {
     if (isValidZip(file)) {
       selectedFile.value = file;
     } else {
-      toast.add({ title: "Invalid File", description: "Only .zip files are allowed.", color: "error" });
+      toast.add({
+        title: "Invalid File",
+        description: "Only .zip files are allowed.",
+        color: "error",
+      });
       target.value = "";
     }
   }
@@ -47,7 +58,11 @@ function handleDrop(event: DragEvent) {
     if (isValidZip(file)) {
       selectedFile.value = file;
     } else {
-      toast.add({ title: "Invalid File", description: "Only .zip files are allowed.", color: "error" });
+      toast.add({
+        title: "Invalid File",
+        description: "Only .zip files are allowed.",
+        color: "error",
+      });
     }
   }
 }
@@ -64,9 +79,10 @@ function clearFile() {
 }
 
 function formatFileSize(bytes: number): string {
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
-  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
-  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + " KB";
+  if (bytes < 1024 * 1024 * 1024)
+    return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
 }
 
 async function handleSubmit() {
@@ -74,7 +90,7 @@ async function handleSubmit() {
     toast.add({
       title: "Error",
       description: "Please select a file to submit.",
-      color: "error"
+      color: "error",
     });
     return;
   }
@@ -115,7 +131,11 @@ async function handleSubmit() {
     <UButton
       variant="ghost"
       size="sm"
-      :to="route.query.courseId && route.query.sectionId ? `/courses/${route.query.courseId}/sections/${route.query.sectionId}` : '/courses'"
+      :to="
+        route.query.courseId && route.query.sectionId
+          ? `/courses/${route.query.courseId}/sections/${route.query.sectionId}`
+          : '/courses'
+      "
       icon="i-heroicons-arrow-left"
       class="mb-6"
     >
@@ -137,7 +157,9 @@ async function handleSubmit() {
           >
             <div class="flex items-start justify-between">
               <div>
-                <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                <h1
+                  class="text-2xl font-bold text-gray-900 dark:text-white mb-2"
+                >
                   {{ assignment.name }}
                 </h1>
                 <p
@@ -187,13 +209,19 @@ async function handleSubmit() {
               </h3>
             </div>
             <p class="text-sm text-green-700 dark:text-green-300 mb-4">
-              Your submission has been queued for grading. Results will be available
-              shortly.
+              Your submission has been queued for grading. Results will be
+              available shortly.
             </p>
             <div class="flex gap-2">
               <UButton
                 v-if="submissionId"
-                :to="{ path: `/submissions/${submissionId}`, query: { courseId: route.query.courseId, sectionId: route.query.sectionId } }"
+                :to="{
+                  path: `/submissions/${submissionId}`,
+                  query: {
+                    courseId: route.query.courseId,
+                    sectionId: route.query.sectionId,
+                  },
+                }"
                 size="sm"
                 color="success"
                 variant="soft"
@@ -230,12 +258,12 @@ async function handleSubmit() {
                 name="i-heroicons-arrow-up-tray"
                 class="w-10 h-10 text-gray-400 mx-auto mb-3"
               />
-              <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <p
+                class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+              >
                 Drop your file here or click to browse
               </p>
-              <p class="text-xs text-gray-500 font-mono">
-                .zip archives only
-              </p>
+              <p class="text-xs text-gray-500 font-mono">.zip archives only</p>
             </div>
 
             <!-- Selected File Display -->
@@ -253,7 +281,9 @@ async function handleSubmit() {
                   />
                 </div>
                 <div class="min-w-0">
-                  <p class="text-sm font-medium text-gray-900 dark:text-white truncate">
+                  <p
+                    class="text-sm font-medium text-gray-900 dark:text-white truncate"
+                  >
                     {{ selectedFile.name }}
                   </p>
                   <p class="text-xs text-gray-500 font-mono">
@@ -294,29 +324,48 @@ async function handleSubmit() {
 
         <!-- Previous Submissions Sidebar -->
         <div class="lg:col-span-1">
-          <div class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 sticky top-24">
-            <h2 class="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+          <div
+            class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 sticky top-24"
+          >
+            <h2
+              class="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2"
+            >
               <UIcon name="i-heroicons-clock" class="w-5 h-5 text-gray-400" />
               Previous Submissions
             </h2>
-            
+
             <div v-if="pendingSubmissions" class="space-y-3">
-              <USkeleton v-for="i in 3" :key="i" class="h-16 w-full rounded-lg" />
+              <USkeleton
+                v-for="i in 3"
+                :key="i"
+                class="h-16 w-full rounded-lg"
+              />
             </div>
-            
-            <div v-else-if="!submissions?.length" class="text-sm text-gray-500 text-center py-6">
+
+            <div
+              v-else-if="!submissions?.length"
+              class="text-sm text-gray-500 text-center py-6"
+            >
               You haven't made any submissions yet.
             </div>
-            
+
             <div v-else class="space-y-3">
               <NuxtLink
                 v-for="sub in submissions"
                 :key="sub.id"
-                :to="{ path: `/submissions/${sub.id}`, query: { courseId: route.query.courseId, sectionId: route.query.sectionId } }"
+                :to="{
+                  path: `/submissions/${sub.id}`,
+                  query: {
+                    courseId: route.query.courseId,
+                    sectionId: route.query.sectionId,
+                  },
+                }"
                 class="block p-3 rounded-lg border border-gray-100 dark:border-gray-800 hover:border-[#861F41]/50 bg-gray-50/50 dark:bg-gray-800/50 transition-colors group"
               >
                 <div class="flex items-center justify-between mb-1">
-                  <span class="text-sm font-medium text-gray-900 dark:text-white group-hover:text-[#861F41] transition-colors">
+                  <span
+                    class="text-sm font-medium text-gray-900 dark:text-white group-hover:text-[#861F41] transition-colors"
+                  >
                     Submission #{{ sub.id }}
                   </span>
                   <UBadge
@@ -326,9 +375,25 @@ async function handleSubmit() {
                     size="xs"
                   />
                 </div>
-                <div class="text-xs text-gray-500 font-mono flex items-center justify-between mt-2">
+                <div
+                  class="text-xs text-gray-500 font-mono flex items-center justify-between mt-2"
+                >
                   <span>{{ new Date(sub.submitTime).toLocaleString() }}</span>
-                  <span v-if="sub.feedbackReady && sub.score !== null">Score: {{ sub.score }}%</span>
+                  <span
+                    v-if="
+                      sub.feedbackReady &&
+                      (sub.submissionResult?.correctnessScore ?? sub.score) !==
+                        null
+                    "
+                  >
+                    Score:
+                    {{
+                      Math.round(
+                        (sub.submissionResult?.correctnessScore ?? sub.score) *
+                          100,
+                      )
+                    }}%
+                  </span>
                 </div>
               </NuxtLink>
             </div>

@@ -25,6 +25,7 @@ import type { BelongsTo } from '@adonisjs/lucid/types/relations'
 import User from './user.js'
 import Assignment from './assignment.js'
 import AssignmentOffering from './assignment_offering.js'
+import SubmissionResult from './submission_result.js'
 
 export default class Submission extends BaseModel {
   static table = 'submission'
@@ -109,4 +110,7 @@ export default class Submission extends BaseModel {
 
   @belongsTo(() => AssignmentOffering)
   declare assignmentOffering: BelongsTo<typeof AssignmentOffering>
+
+  @belongsTo(() => SubmissionResult, { foreignKey: 'submissionResultId' })
+  declare submissionResult: BelongsTo<typeof SubmissionResult>
 }

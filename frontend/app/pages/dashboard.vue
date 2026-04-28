@@ -231,10 +231,10 @@ function timeAgo(dateStr: string): string {
             <div class="flex items-center justify-between text-sm">
               <span class="text-gray-600 dark:text-gray-400">Job Queue</span>
               <div class="flex items-center gap-1.5">
-                <div class="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                <div class="w-1.5 h-1.5 rounded-full bg-green-500" />
                 <span
-                  class="text-amber-600 dark:text-amber-400 font-mono text-xs"
-                  >Connecting</span
+                  class="text-green-600 dark:text-green-400 font-mono text-xs"
+                  >Online</span
                 >
               </div>
             </div>
