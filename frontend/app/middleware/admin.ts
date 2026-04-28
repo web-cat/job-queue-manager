@@ -1,11 +1,17 @@
-export default defineNuxtRouteMiddleware((to) => {
-  const authStore = useAuthStore()
+import { nextTick } from "vue";
+
+export default defineNuxtRouteMiddleware(async () => {
+  if (import.meta.server) return;
+
+  const authStore = useAuthStore();
+
+  await nextTick();
 
   if (!authStore.isAuthenticated) {
-    return navigateTo('/login')
+    return navigateTo("/login");
   }
 
   if (authStore.user?.globalRoleId !== 1) {
-    return navigateTo('/dashboard')
+    return navigateTo("/dashboard");
   }
-})
+});

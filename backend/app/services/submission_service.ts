@@ -81,7 +81,9 @@ export default class SubmissionService {
 
       // 5. Gather assignment data for queueing
       const assignment = await Assignment.findOrFail(data.workoutId, { client: trx })
-      imageTag = assignment.dockerImageTag || 'vt-cs/default-grader:latest'
+      imageTag =
+        assignment.dockerImageTag ||
+        'ghcr.io/sytraore/job-queue-scheduler/test-grader-java8-zip:latest'
 
       // Commit before network call so the external system/jobQueueService can find the submission
       await trx.commit()

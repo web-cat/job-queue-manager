@@ -121,6 +121,7 @@ function registerApiRoutes(prefix: string = '') {
       router.patch('/users/:id/role', [UsersController, 'updateRole'])
       router.get('/terms', [TermsController, 'index'])
       router.post('/terms', [TermsController, 'store'])
+      router.get('/administration/courses/all', [CoursesController, 'allCourses'])
       // Execution service / queue administration endpoints
       router.get('/administration/execution/queue/status', [
         ExecutionServiceController,

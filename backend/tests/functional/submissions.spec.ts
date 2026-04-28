@@ -284,7 +284,7 @@ test.group('Submissions — webhook', () => {
     const { token } = await loginAsUser(client, 4)
     const userId = await getUserId(client, token)
     const { submissionId, assignmentId } = await createSubmissionWithAssignmentOptions(userId, {
-      dockerImageTag: 'webcat/java-grader:cs2114-p3',
+      dockerImageTag: 'ghcr.io/sytraore/job-queue-scheduler/test-grader-java8-zip:latest',
       estimatedRuntimeSeconds: 120,
     })
     const { clientId, clientSecret } = await createOAuthClientCredentials(client, token)

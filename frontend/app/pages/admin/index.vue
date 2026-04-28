@@ -30,9 +30,16 @@ const { data: terms, refresh: refreshTerms } = await useAsyncData(
 
 const { data: courses, refresh: refreshCourses } = await useAsyncData(
   "admin-courses",
-  () => get<{ data: any[] }>("/courses?limit=100").catch(() => null)
+  () => get<{ data: any[] }>("/administration/courses/all").catch(() => null)
 );
 const coursesList = computed(() => courses.value?.data || []);
+const courseColumns = [
+  { accessorKey: "id", header: "ID" },
+  { accessorKey: "name", header: "Name" },
+  { accessorKey: "number", header: "Number" },
+  { accessorKey: "slug", header: "Slug" },
+  { id: "organization", header: "Organization" },
+];
 
 const { data: policies } = await useAsyncData(
   "admin-policies",
@@ -353,6 +360,17 @@ async function createAssignment() {
             </UForm>
           </UCard>
         </div>
+
+        <UCard class="mt-6">
+          <template #header>
+            <h2 class="text-lg font-semibold">All Courses</h2>
+          </template>
+          <UTable :data="coursesList" :columns="courseColumns">
+            <template #organization-cell="{ row }">
+              {{ row.original.organization?.name || "-" }}
+            </template>
+          </UTable>
+        </UCard>
       </template>
 
       <!-- ================= ENROLLMENTS TAB ================= -->
