@@ -99,6 +99,21 @@ export default class CoursesController {
   }
 
   /**
+   * GET /api/administration/courses/all
+   * List ALL courses (admin only) — used for course section creation
+   */
+  async allCourses({ request, response }: HttpContext) {
+    const { limit = 100 } = request.qs()
+
+    const courses = await Course.query()
+      .preload('organization')
+      .orderBy('name', 'asc')
+      .limit(limit)
+
+    return response.ok({ data: courses })
+  }
+
+  /**
    * GET /api/courses/:id
    * Get a single course with its sections
    */

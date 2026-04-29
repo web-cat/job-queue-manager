@@ -16,6 +16,11 @@ const submissions = computed(() => response.value?.data ?? []);
 
 watch(page, () => refresh());
 
+function getCorrectnessScore(sub: any): number | null {
+  const score = sub.submissionResult?.correctnessScore ?? sub.score;
+  return typeof score === "number" ? score : null;
+}
+
 function statusColor(sub: any) {
   if (sub.feedbackReady) return "success";
   return "warning";
@@ -119,16 +124,19 @@ function timeAgo(dateStr: string): string {
           </div>
 
           <!-- Score if graded -->
-          <div v-if="sub.feedbackReady && sub.score != null" class="text-right">
+          <div
+            v-if="sub.feedbackReady && getCorrectnessScore(sub) != null"
+            class="text-right"
+          >
             <div
               class="text-lg font-bold font-mono"
               :class="
-                sub.score >= 0.7
+                getCorrectnessScore(sub)! >= 0.7
                   ? 'text-green-600 dark:text-green-400'
                   : 'text-red-600 dark:text-red-400'
               "
             >
-              {{ Math.round(sub.score * 100) }}%
+              {{ Math.round(getCorrectnessScore(sub)! * 100) }}%
             </div>
           </div>
 

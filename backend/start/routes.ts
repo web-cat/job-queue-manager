@@ -3,7 +3,7 @@
 // protects them.
 
 // DESIGN: Routes are split into three groups:
-//   1. Public routes — no auth required (register, login, CAS, LTI, webhook)
+//   1. Public routes — no auth required (register, login, CAS, LTI)
 //   2. Session API (/api) — AdonisJS token auth, used by the Nuxt frontend
 //   3. External Tool API (/api/v1) — HMAC-SHA256 signed requests, used by
 //      scripts, IDE plugins, and instructor automation tools
@@ -34,11 +34,14 @@ const UsersController = () => import('#controllers/users_controller')
 const TermsController = () => import('#controllers/terms_controller')
 const SubmissionPoliciesController = () => import('#controllers/submission_policies_controller')
 const OAuthController = () => import('#controllers/oauth_controller')
+const ExecutionServiceController = () => import('#controllers/execution_service_controller')
+const ImageManagementController = () => import('#controllers/image_management_controller')
 
 // ── Global Route Matchers ─────────────────────────────────────────────
 router.where('id', router.matchers.number())
 router.where('sectionId', router.matchers.number())
 router.where('userId', router.matchers.number())
+router.where('imageId', router.matchers.number())
 router.where('offeringId', router.matchers.number())
 
 // ── Health check ──────────────────────────────────────────────────────
@@ -65,10 +68,6 @@ router.get('/api/auth/cas/logout', [CasController, 'logout'])
 router.post('/api/lti/init', [LtiController, 'init'])
 router.post('/api/lti/launch', [LtiController, 'launch'])
 router.get('/api/lti/jwks', [LtiController, 'jwks'])
-
-// ── Webhook from partner team (public) ───────────────────────────────
-// TODO: Add IP restriction middleware once partner team confirms their IPs
-router.post('/api/submissions/webhook', [SubmissionsController, 'webhook'])
 
 // ── Public download route (protected by signed URL) ──────────────────
 router
@@ -128,6 +127,23 @@ function registerApiRoutes(prefix: string = '') {
       router.patch('/users/:id/role', [UsersController, 'updateRole'])
       router.get('/terms', [TermsController, 'index'])
       router.post('/terms', [TermsController, 'store'])
+      router.get('/administration/courses/all', [CoursesController, 'allCourses'])
+      // Execution service / queue administration endpoints
+      router.get('/administration/execution/queue/status', [
+        ExecutionServiceController,
+        'queueStatus',
+      ])
+      router.get('/administration/execution/queue/position/:jobId', [
+        ExecutionServiceController,
+        'queuePosition',
+      ])
+      router.get('/administration/execution/workers', [ExecutionServiceController, 'workers'])
+      // Image management endpoints (proxies to execution service)
+      router.get('/images', [ImageManagementController, 'index'])
+      router.get('/images/:imageId', [ImageManagementController, 'show'])
+      router.post('/images', [ImageManagementController, 'store'])
+      router.put('/images/:imageId', [ImageManagementController, 'update'])
+      router.delete('/images/:imageId', [ImageManagementController, 'destroy'])
     })
     .use(middleware.admin())
 }
@@ -138,6 +154,7 @@ router
   .group(() => registerApiRoutes('api.'))
   .prefix('/api')
   .use(middleware.auth({ guards: ['api'] }))
+
 // ── Programmatic API (/api/v1) ────────────────────────────────────────
 // Authenticated via HMAC-SHA256 request signing using OAuth client credentials.
 // For any user or system that wants to interact with the backend programmatically
@@ -148,6 +165,13 @@ router
 // Generate credentials at: POST /api/oauth/clients (requires existing session)
 // Signing instructions: see app/auth/guards/hmac_guard.ts
 router
-  .group(() => registerApiRoutes('v1.'))
+  .group(() => {
+    registerApiRoutes('v1.')
+
+    // Webhook from partner team (HMAC required)
+    router
+      .post('/submissions/webhook', [SubmissionsController, 'webhook'])
+      .use(middleware.serviceAccount())
+  })
   .prefix('/api/v1')
   .use(middleware.oauthSignature())

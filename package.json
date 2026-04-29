@@ -32,5 +32,8 @@
       "esbuild",
       "vue-demi"
     ]
+  },
+  "devDependencies": {
+    "nock": "^13.5.6"
   }
 }

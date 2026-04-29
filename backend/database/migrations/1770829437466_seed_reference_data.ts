@@ -37,9 +37,10 @@ export default class extends BaseSchema {
     await this.db.rawQuery(`
       INSERT INTO global_role (id, name, can_manage_all_courses, can_edit_system_configuration, builtin)
       VALUES
-        (1, 'Admin',      true,  true,  true),
-        (2, 'Instructor', false, false, true),
-        (3, 'Student',    false, false, true)
+        (1, 'Admin',           true,  true,  true),
+        (2, 'Instructor',      false, false, true),
+        (3, 'Student',         false, false, true),
+        (4, 'Service Account', false, false, true)
       ON CONFLICT (id) DO NOTHING
     `)
 
@@ -85,6 +86,6 @@ export default class extends BaseSchema {
     await this.db.rawQuery(`DELETE FROM organization WHERE id = 1`)
     await this.db.rawQuery(`DELETE FROM lms_type WHERE id IN (1, 2, 3, 4)`)
     await this.db.rawQuery(`DELETE FROM course_role WHERE id IN (1, 2, 3, 4)`)
-    await this.db.rawQuery(`DELETE FROM global_role WHERE id IN (1, 2, 3)`)
+    await this.db.rawQuery(`DELETE FROM global_role WHERE id IN (1, 2, 3, 4)`)
   }
 }

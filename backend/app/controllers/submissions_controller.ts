@@ -26,10 +26,8 @@
 // 1. Uncomment job_queue_service.enqueue() once other team confirms endpoint
 // 2. Implement webhook() to process result callbacks and update submission_result
 //    with actual scores from the grading system
-// 3. The result() method returns submission.score — this is a column on the
-//    submission table itself (not submission_result). Confirm with other team
-//    whether they write scores to submission.score or submission_result.correctness_score
-//    and update accordingly.
+// 3. The result() method now reads the nested submission_result row.
+//    Keep the response shape aligned with frontend score displays.
 // 4. file_path on submission stores the MinIO object key, not a local path.
 //    Format: submissions/{submissionId}/input/{originalFilename}
 
@@ -62,19 +60,18 @@ const webhookPayloadValidator = vine.compile(
       started_at: vine.string().optional(),
       completed_at: vine.string().optional(),
       retry_count: vine.number().optional(),
-      result: vine
-        .object({
-          correctness_score: vine.number().optional(),
-          tool_score: vine.number().optional(),
-          comments: vine.string().optional(),
-          comment_format: vine.string().optional(),
-          runtime_ms: vine.number().optional(),
-          exit_code: vine.number().optional(),
-          test_output: vine.string().optional(),
-          has_payload: vine.boolean().optional(),
-          payload_url: vine.string().optional(),
-        })
-        .optional(),
+      result: vine.object({
+        correctness_score: vine.number().optional(),
+        tool_score: vine.number().optional(),
+        comments: vine.string().optional(),
+        comment_format: vine.number().optional(),
+        commentFormat: vine.number().optional(),
+        runtime_ms: vine.number().optional(),
+        exit_code: vine.number().optional(),
+        test_output: vine.string().optional(),
+        has_payload: vine.boolean().optional(),
+        payload_url: vine.string().optional(),
+      }),
     }),
   })
 )
@@ -98,6 +95,7 @@ export default class SubmissionsController {
     // Query submissions scoped to the user — admins see all, everyone else sees only their own
     const query = Submission.query()
       .preload('assignmentOffering', (q) => q.preload('assignment'))
+      .preload('submissionResult')
       .orderBy('created_at', 'desc')
 
     if (user.globalRoleId !== 1) {
@@ -125,6 +123,7 @@ export default class SubmissionsController {
     const submission = await Submission.query()
       .where('id', params.id)
       .preload('assignmentOffering', (q) => q.preload('assignment'))
+      .preload('submissionResult')
       .firstOrFail()
 
     await bouncer.with(SubmissionPolicy).authorize('view', submission)
@@ -193,16 +192,15 @@ export default class SubmissionsController {
     }
   }
 
-  /**
-   * GET /api/submissions/:id/result
-   * Get the grading result for a submission.
-   * Returns { ready: false } while grading is in progress.
-   *
-   * NOTE: score is read from submission.score — confirm with other team
-   * whether they write to this column or to submission_result.correctness_score.
-   */
+  // GET /api/submissions/:id/result
+  // Get the grading result for a submission.
+  // Returns { ready: false } while grading is in progress.
+  // Grading details are read from submission_result.
   async result({ bouncer, params, response }: HttpContext) {
-    const submission = await Submission.query().where('id', params.id).firstOrFail()
+    const submission = await Submission.query()
+      .where('id', params.id)
+      .preload('submissionResult')
+      .firstOrFail()
 
     await bouncer.with(SubmissionPolicy).authorize('view', submission)
 
@@ -213,6 +211,7 @@ export default class SubmissionsController {
     return response.ok({
       ready: true,
       submissionId: submission.id,
+      submissionResult: submission.submissionResult,
     })
   }
 
@@ -223,7 +222,7 @@ export default class SubmissionsController {
   async update({ bouncer, params, request, response }: HttpContext) {
     await bouncer.with(SubmissionPolicy).authorize('update')
     const submission = await Submission.findOrFail(params.id)
-    const data = request.only(['feedbackReady', 'score'])
+    const data = request.only(['feedbackReady'])
     await submission.merge(data).save()
     return response.ok(submission)
   }
@@ -240,11 +239,9 @@ export default class SubmissionsController {
   }
 
   /**
-   * POST /api/submissions/webhook
+   * POST /api/v1/submissions/webhook
    * Receives result callbacks from the other team when grading completes.
-   * Public route — no auth token required.
-   *
-   * SECURITY: Should be IP restricted to other team's cluster IPs in production.
+   * Protected route — HMAC authentication required.
    */
   async webhook({ request, response }: HttpContext) {
     const payload = await request.validateUsing(webhookPayloadValidator)

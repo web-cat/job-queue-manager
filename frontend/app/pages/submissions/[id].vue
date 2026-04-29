@@ -40,6 +40,50 @@ onUnmounted(() => {
   if (pollInterval) clearInterval(pollInterval);
 });
 
+const showInitialSkeleton = computed(() => pending.value && !submission.value);
+
+const submissionResult = computed(
+  () => result.value?.submissionResult ?? submission.value?.submissionResult,
+);
+
+const correctnessScore = computed<number | null>(() => {
+  const score = submissionResult.value?.correctnessScore;
+  return typeof score === "number" ? score : null;
+});
+
+const toolScore = computed<number | null>(() => {
+  const score = submissionResult.value?.toolScore;
+  return typeof score === "number" ? score : null;
+});
+
+const runtimeSeconds = computed<number | null>(() => {
+  const runtimeMs = submissionResult.value?.runtimeMs;
+  return typeof runtimeMs === "number" ? runtimeMs / 1000 : null;
+});
+
+const scoreColor = computed(() => {
+  if (correctnessScore.value == null) return "text-gray-500";
+  if (correctnessScore.value >= 0.9)
+    return "text-green-600 dark:text-green-400";
+  if (correctnessScore.value >= 0.7)
+    return "text-amber-600 dark:text-amber-400";
+  return "text-red-600 dark:text-red-400";
+});
+
+function formatPercent(score: number | null): string {
+  return score == null ? "—" : `${Math.round(score * 100)}%`;
+}
+
+function formatRuntime(seconds: number | null): string {
+  if (seconds == null) return "—";
+  if (seconds < 1) return `${Math.round(seconds * 1000)} ms`;
+  return `${seconds.toFixed(2)} s`;
+}
+
+function formatComments(comments: string | null | undefined): string {
+  return comments?.trim() || "No grader comments were provided.";
+}
+
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleString("en-US", {
     month: "short",
@@ -50,39 +94,41 @@ function formatDate(dateStr: string): string {
   });
 }
 
-const scoreColor = computed(() => {
-  if (!result.value?.score) return "text-gray-500";
-  if (result.value.score >= 0.9) return "text-green-600 dark:text-green-400";
-  if (result.value.score >= 0.7) return "text-amber-600 dark:text-amber-400";
-  return "text-red-600 dark:text-red-400";
-});
-
 async function downloadFile() {
   if (!submission.value?.id) return;
-  
+
   downloading.value = true;
   try {
-    const response = await fetch(`${config.public.apiBase}/api/submissions/${submission.value.id}/download-url`, {
-      headers: {
-        'Authorization': `Bearer ${authStore.token}`
-      }
-    });
-    
+    const response = await fetch(
+      `${config.public.apiBase}/api/submissions/${submission.value.id}/download-url`,
+      {
+        headers: {
+          Authorization: `Bearer ${authStore.token}`,
+        },
+      },
+    );
+
     if (!response.ok) {
       throw new Error("Failed to secure download link");
     }
-    
+
     const data = await response.json();
-    
+
     if (data.url) {
       // Append the apiBase to the relative signed URL if needed
-      const fullUrl = data.url.startsWith('http') ? data.url : `${config.public.apiBase}${data.url}`;
+      const fullUrl = data.url.startsWith("http")
+        ? data.url
+        : `${config.public.apiBase}${data.url}`;
       window.location.assign(fullUrl);
     } else {
       throw new Error("Invalid response from server");
     }
   } catch (e: any) {
-    toast.add({ title: "Download Failed", description: e.message, color: "error" });
+    toast.add({
+      title: "Download Failed",
+      description: e.message,
+      color: "error",
+    });
   } finally {
     downloading.value = false;
   }
@@ -94,14 +140,24 @@ async function downloadFile() {
     <UButton
       variant="ghost"
       size="sm"
-      :to="submission?.workoutId ? { path: `/assignments/${submission.workoutId}`, query: { courseId: route.query.courseId, sectionId: route.query.sectionId } } : '/submissions'"
+      :to="
+        submission?.workoutId
+          ? {
+              path: `/assignments/${submission.workoutId}`,
+              query: {
+                courseId: route.query.courseId,
+                sectionId: route.query.sectionId,
+              },
+            }
+          : '/submissions'
+      "
       icon="i-heroicons-arrow-left"
       class="mb-6"
     >
       Back to assignment
     </UButton>
 
-    <div v-if="pending" class="space-y-4">
+    <div v-if="showInitialSkeleton" class="space-y-4">
       <USkeleton class="h-8 w-48" />
       <USkeleton class="h-40 w-full rounded-xl" />
     </div>
@@ -122,12 +178,12 @@ async function downloadFile() {
               variant="soft"
             />
           </div>
-          
+
           <UButton
             v-if="submission.filePath"
             icon="i-heroicons-arrow-down-tray"
             size="sm"
-            color="white"
+            color="neutral"
             variant="solid"
             :loading="downloading"
             @click="downloadFile"
@@ -186,34 +242,105 @@ async function downloadFile() {
         </div>
 
         <!-- Result available -->
-        <template v-else-if="result?.ready">
-          <!-- Score display -->
+        <template v-else-if="submissionResult">
           <div
-            class="flex items-center justify-center py-6 mb-6 bg-gray-50 dark:bg-gray-800/50 rounded-xl"
+            class="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]"
           >
-            <div class="text-center">
-              <div
-                class="text-6xl font-bold font-mono mb-1"
-                :class="scoreColor"
-              >
-                {{
-                  result.score != null
-                    ? `${Math.round(result.score * 100)}%`
-                    : "—"
-                }}
+            <div
+              class="flex items-center justify-center py-6 bg-gray-50 dark:bg-gray-800/50 rounded-xl"
+            >
+              <div class="text-center">
+                <div
+                  class="text-6xl font-bold font-mono mb-1"
+                  :class="scoreColor"
+                >
+                  {{ formatPercent(correctnessScore) }}
+                </div>
+                <div class="text-sm text-gray-500">Correctness Score</div>
               </div>
-              <div class="text-sm text-gray-500">Correctness Score</div>
+            </div>
+
+            <div class="grid gap-3">
+              <div
+                class="rounded-xl border border-gray-200 dark:border-gray-800 p-4 bg-white dark:bg-gray-900"
+              >
+                <div
+                  class="text-xs uppercase tracking-wider text-gray-500 font-mono mb-1"
+                >
+                  Tool Score
+                </div>
+                <div
+                  class="text-lg font-semibold text-gray-900 dark:text-white font-mono"
+                >
+                  {{ formatPercent(toolScore) }}
+                </div>
+              </div>
+              <div
+                class="rounded-xl border border-gray-200 dark:border-gray-800 p-4 bg-white dark:bg-gray-900"
+              >
+                <div
+                  class="text-xs uppercase tracking-wider text-gray-500 font-mono mb-1"
+                >
+                  Runtime
+                </div>
+                <div
+                  class="text-lg font-semibold text-gray-900 dark:text-white font-mono"
+                >
+                  {{ formatRuntime(runtimeSeconds) }}
+                </div>
+              </div>
+              <div
+                class="rounded-xl border border-gray-200 dark:border-gray-800 p-4 bg-white dark:bg-gray-900"
+              >
+                <div
+                  class="text-xs uppercase tracking-wider text-gray-500 font-mono mb-1"
+                >
+                  Exit Code
+                </div>
+                <div
+                  class="text-lg font-semibold text-gray-900 dark:text-white font-mono"
+                >
+                  {{ submissionResult.exitCode ?? "—" }}
+                </div>
+              </div>
             </div>
           </div>
 
-          <!-- TODO: Show test case results when other team confirms result format -->
           <div
-            class="text-center text-sm text-gray-500 font-mono p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg"
+            class="mt-4 rounded-xl border border-gray-200 dark:border-gray-800 p-4 bg-gray-50 dark:bg-gray-800/50"
           >
-            Detailed test case results coming soon<br />
-            (pending other team API contract)
+            <div
+              class="text-xs uppercase tracking-wider text-gray-500 font-mono mb-2"
+            >
+              Grader Comments
+            </div>
+            <p
+              class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap"
+            >
+              {{ formatComments(submissionResult.comments) }}
+            </p>
+          </div>
+
+          <div
+            v-if="submissionResult.testOutput"
+            class="mt-4 rounded-xl border border-gray-200 dark:border-gray-800 p-4 bg-gray-950 text-gray-100"
+          >
+            <div
+              class="text-xs uppercase tracking-wider text-gray-400 font-mono mb-2"
+            >
+              Test Output
+            </div>
+            <pre
+              class="text-xs leading-6 whitespace-pre-wrap font-mono overflow-x-auto"
+              >{{ submissionResult.testOutput }}</pre
+            >
           </div>
         </template>
+
+        <div v-else class="text-center py-8 text-sm text-gray-500">
+          The submission is marked as graded, but no result payload is available
+          yet.
+        </div>
       </div>
 
       <!-- Job queue info -->

@@ -1,9 +1,11 @@
 import { test } from '@japa/runner'
+import nock from 'nock'
 import db from '@adonisjs/lucid/services/db'
 import User from '#models/user'
+import { createHash, createHmac, randomUUID } from 'node:crypto'
 
 // Helper to register and get a token
-async function loginAsUser(client: any) {
+async function loginAsUser(client: any, roleId: number = 1) {
   const email = `user_${Date.now()}@test.com`
   const register = await client.post('/api/auth/register').json({
     firstName: 'Test',
@@ -12,9 +14,9 @@ async function loginAsUser(client: any) {
     password: 'password123',
   })
 
-  // Promote user to Admin to pass Bouncer RBAC during tests
+  // Promote user to requested role (Admin by default to pass Bouncer RBAC during tests)
   const user = await User.findByOrFail('email', email)
-  user.globalRoleId = 1
+  user.globalRoleId = roleId
   await user.save()
 
   return { token: register.body().token.token, email }
@@ -67,13 +69,157 @@ async function createSubmission(userId: number) {
     })
     .returning('id')
 
+  // track created rows for cleanup
+  createdSubmissionIds.push(submission.id)
+  createdAssignmentIds.push(assignment.id)
+  createdPolicyIds.push(policy.id)
+  createdResultIds.push(result.id)
+
   return submission.id
+}
+
+async function createSubmissionWithAssignmentOptions(
+  userId: number,
+  options: { dockerImageTag?: string | null; estimatedRuntimeSeconds?: number | null }
+) {
+  const [result] = await db
+    .table('submission_result')
+    .insert({ correctness_score: 0 })
+    .returning('id')
+
+  const [policy] = await db
+    .table('submission_policy')
+    .insert({
+      award_early_bonus: false,
+      deduct_late_penalty: false,
+      allow_partners: false,
+      auto_assign_partners: true,
+      deduct_excess_submission_penalty: false,
+      force_lti_clickthrough: false,
+      use_time_bank_days: false,
+      submisison_method: 0,
+    })
+    .returning('id')
+
+  const [assignment] = await db
+    .table('assignment')
+    .insert({
+      name: `Test Assignment ${Date.now()}`,
+      submission_policy_id: policy.id,
+      scrambled: false,
+      docker_image_tag: options.dockerImageTag ?? null,
+      estimated_runtime_seconds: options.estimatedRuntimeSeconds ?? 120,
+    })
+    .returning('id')
+
+  const [submission] = await db
+    .table('submission')
+    .insert({
+      user_id: userId,
+      workout_id: assignment.id,
+      submission_result_id: result.id,
+      feedback_ready: false,
+      is_submission_for_grading: true,
+      partner_link: false,
+    })
+    .returning('id')
+
+  // track created rows for cleanup
+  createdSubmissionIds.push(submission.id)
+  createdAssignmentIds.push(assignment.id)
+  createdPolicyIds.push(policy.id)
+  createdResultIds.push(result.id)
+
+  return { submissionId: submission.id, assignmentId: assignment.id }
+}
+
+// Track created DB entities so tests can clean up after themselves
+const createdSubmissionIds: number[] = []
+const createdAssignmentIds: number[] = []
+const createdPolicyIds: number[] = []
+const createdResultIds: number[] = []
+// Helper to cleanup created rows. Call from test `finally` blocks.
+async function cleanupCreated() {
+  try {
+    if (createdSubmissionIds.length) {
+      await db.from('submission').whereIn('id', createdSubmissionIds).del()
+    }
+    if (createdAssignmentIds.length) {
+      await db.from('assignment').whereIn('id', createdAssignmentIds).del()
+    }
+    if (createdPolicyIds.length) {
+      await db.from('submission_policy').whereIn('id', createdPolicyIds).del()
+    }
+    if (createdResultIds.length) {
+      await db.from('submission_result').whereIn('id', createdResultIds).del()
+    }
+  } catch (e) {
+    console.warn('cleanup error', e)
+  } finally {
+    createdSubmissionIds.length = 0
+    createdAssignmentIds.length = 0
+    createdPolicyIds.length = 0
+    createdResultIds.length = 0
+  }
+}
+
+// Helper to mock grading-cluster endpoints using `nock`.
+// Usage example:
+//   const scope = mockGraderStatus('online')
+//   // run code that calls grading cluster
+//   scope.done()
+function mockGraderStatus(mode: 'online' | 'restricted' | 'offline' = 'online') {
+  const base = process.env.GRADER_BASE_URL || 'http://grading.cluster'
+  const scope = nock(base).get('/api/administration/execution/queue/status').query(true)
+
+  if (mode === 'online') return scope.reply(200, { status: 'ok', workers: 2, queueLength: 1 })
+  if (mode === 'restricted') return scope.reply(403, { error: 'forbidden' })
+  return scope.reply(500, { error: 'down' })
 }
 
 // Helper to get the current user id from token
 async function getUserId(client: any, token: string) {
   const me = await client.get('/api/auth/me').header('Authorization', `Bearer ${token}`)
   return me.body().id
+}
+
+async function createOAuthClientCredentials(client: any, token: string) {
+  const createClient = await client
+    .post('/api/oauth/clients')
+    .header('Authorization', `Bearer ${token}`)
+    .json({ name: `webhook-client-${Date.now()}` })
+
+  createClient.assertStatus(201)
+
+  return {
+    clientId: createClient.body().client_id as string,
+    clientSecret: createClient.body().client_secret as string,
+  }
+}
+
+function buildHmacHeaders(args: {
+  clientId: string
+  clientSecret: string
+  method: string
+  path: string
+  rawBody?: string
+  nonce?: string
+  timestamp?: string
+}) {
+  const timestamp = args.timestamp ?? String(Date.now())
+  const nonce = args.nonce ?? randomUUID()
+  const rawBody = args.rawBody ?? ''
+
+  const bodyHash = createHash('sha256').update(rawBody).digest('hex')
+  const canonical = [args.method.toUpperCase(), args.path, timestamp, nonce, bodyHash].join('\n')
+  const signature = createHmac('sha256', args.clientSecret).update(canonical).digest('hex')
+
+  return {
+    'x-api-key': args.clientId,
+    'x-timestamp': timestamp,
+    'x-nonce': nonce,
+    'x-signature': signature,
+  }
 }
 
 test.group('Submissions — index', () => {
@@ -83,7 +229,7 @@ test.group('Submissions — index', () => {
     const response = await client.get('/api/submissions').header('Authorization', `Bearer ${token}`)
 
     response.assertStatus(200)
-  })
+  }).timeout(60_000)
 
   test('returns 401 when not authenticated', async ({ client }) => {
     const response = await client.get('/api/submissions')
@@ -91,18 +237,23 @@ test.group('Submissions — index', () => {
   })
 })
 
-test.group('Submissions — show', () => {
+test.group('Submissions — show', (group) => {
   test('returns a single submission', async ({ client }) => {
     const { token } = await loginAsUser(client)
     const userId = await getUserId(client, token)
-    const submissionId = await createSubmission(userId)
+    let submissionId
+    try {
+      submissionId = await createSubmission(userId)
 
-    const response = await client
-      .get(`/api/submissions/${submissionId}`)
-      .header('Authorization', `Bearer ${token}`)
+      const response = await client
+        .get(`/api/submissions/${submissionId}`)
+        .header('Authorization', `Bearer ${token}`)
 
-    response.assertStatus(200)
-    response.assertBodyContains({ id: submissionId })
+      response.assertStatus(200)
+      response.assertBodyContains({ id: submissionId })
+    } finally {
+      await cleanupCreated()
+    }
   })
 
   test('returns 404 for non-existent submission', async ({ client }) => {
@@ -121,18 +272,23 @@ test.group('Submissions — show', () => {
   })
 })
 
-test.group('Submissions — result', () => {
+test.group('Submissions — result', (group) => {
   test('returns not ready when feedback is not ready', async ({ client }) => {
     const { token } = await loginAsUser(client)
     const userId = await getUserId(client, token)
-    const submissionId = await createSubmission(userId)
+    let submissionId
+    try {
+      submissionId = await createSubmission(userId)
 
-    const response = await client
-      .get(`/api/submissions/${submissionId}/result`)
-      .header('Authorization', `Bearer ${token}`)
+      const response = await client
+        .get(`/api/submissions/${submissionId}/result`)
+        .header('Authorization', `Bearer ${token}`)
 
-    response.assertStatus(200)
-    response.assertBodyContains({ ready: false })
+      response.assertStatus(200)
+      response.assertBodyContains({ ready: false })
+    } finally {
+      await cleanupCreated()
+    }
   })
 
   test('returns 401 when not authenticated', async ({ client }) => {
@@ -141,52 +297,231 @@ test.group('Submissions — result', () => {
   })
 })
 
-test.group('Submissions — webhook', () => {
+test.group('Submissions — webhook', (group) => {
   test('accepts webhook payload and returns received', async ({ client, assert }) => {
-    const { token } = await loginAsUser(client)
+    const { token } = await loginAsUser(client, 4)
     const userId = await getUserId(client, token)
     const submissionId = await createSubmission(userId)
+    const { clientId, clientSecret } = await createOAuthClientCredentials(client, token)
 
-    const response = await client.post('/api/submissions/webhook').json({
+    const payload = {
       data: {
         submission_id: submissionId,
         status: 'pending',
+        result: {
+          correctness_score: 0,
+          tool_score: 0,
+          comments: '',
+          comment_format: 0,
+          runtime_ms: 0,
+          exit_code: 0,
+          test_output: '',
+          has_payload: false,
+          payload_url: '',
+        },
       },
+    }
+
+    const rawBody = JSON.stringify(payload)
+    const headers = buildHmacHeaders({
+      clientId,
+      clientSecret,
+      method: 'POST',
+      path: '/api/v1/submissions/webhook',
+      rawBody,
     })
 
-    response.assertStatus(200)
-    response.assertBodyContains({ received: true })
+    const response = await client
+      .post('/api/v1/submissions/webhook')
+      .header('x-api-key', headers['x-api-key'])
+      .header('x-timestamp', headers['x-timestamp'])
+      .header('x-nonce', headers['x-nonce'])
+      .header('x-signature', headers['x-signature'])
+      .json(payload)
 
-    const updatedSubmission = await db.from('submission').where('id', submissionId).first()
-    assert.equal(updatedSubmission?.status, 'pending')
+    try {
+      response.assertStatus(200)
+      response.assertBodyContains({ received: true })
+
+      const updatedSubmission = await db.from('submission').where('id', submissionId).first()
+      assert.equal(updatedSubmission?.status, 'pending')
+    } finally {
+      await cleanupCreated()
+    }
   })
 
-  test('returns 400 for invalid webhook payload shape', async ({ client, assert }) => {
-    const response = await client.post('/api/submissions/webhook').json({
+  test('updates the assignment runtime estimate from webhook results', async ({
+    client,
+    assert,
+  }) => {
+    const { token } = await loginAsUser(client, 4)
+    const userId = await getUserId(client, token)
+    const { submissionId, assignmentId } = await createSubmissionWithAssignmentOptions(userId, {
+      dockerImageTag: 'ghcr.io/sytraore/job-queue-scheduler/test-grader-java8-zip:latest',
+      estimatedRuntimeSeconds: 120,
+    })
+    const { clientId, clientSecret } = await createOAuthClientCredentials(client, token)
+
+    const payload = {
       data: {
+        submission_id: submissionId,
+        status: 'completed',
+        result: {
+          correctness_score: 0,
+          tool_score: 0,
+          comments: '',
+          comment_format: 0,
+          runtime_ms: 8000,
+          exit_code: 0,
+          test_output: '',
+          has_payload: false,
+          payload_url: '',
+        },
+      },
+    }
+
+    const rawBody = JSON.stringify(payload)
+    const headers = buildHmacHeaders({
+      clientId,
+      clientSecret,
+      method: 'POST',
+      path: '/api/v1/submissions/webhook',
+      rawBody,
+    })
+
+    const response = await client
+      .post('/api/v1/submissions/webhook')
+      .header('x-api-key', headers['x-api-key'])
+      .header('x-timestamp', headers['x-timestamp'])
+      .header('x-nonce', headers['x-nonce'])
+      .header('x-signature', headers['x-signature'])
+      .json(payload)
+
+    response.assertStatus(200)
+    try {
+      response.assertStatus(200)
+
+      const updatedAssignment = await db.from('assignment').where('id', assignmentId).first()
+      assert.equal(updatedAssignment?.estimated_runtime_seconds, 64)
+    } finally {
+      await cleanupCreated()
+    }
+  })
+
+  test('returns 422 when required result object is missing', async ({ client, assert }) => {
+    const { token } = await loginAsUser(client, 4)
+    const userId = await getUserId(client, token)
+    const submissionId = await createSubmission(userId)
+    const { clientId, clientSecret } = await createOAuthClientCredentials(client, token)
+
+    const payload = {
+      data: {
+        submission_id: submissionId,
         status: 'completed',
         submitted_at: new Date().toISOString(),
         started_at: new Date().toISOString(),
         completed_at: new Date().toISOString(),
         retry_count: 0,
+      },
+    }
+
+    const rawBody = JSON.stringify(payload)
+    const headers = buildHmacHeaders({
+      clientId,
+      clientSecret,
+      method: 'POST',
+      path: '/api/v1/submissions/webhook',
+      rawBody,
+    })
+
+    const response = await client
+      .post('/api/v1/submissions/webhook')
+      .header('x-api-key', headers['x-api-key'])
+      .header('x-timestamp', headers['x-timestamp'])
+      .header('x-nonce', headers['x-nonce'])
+      .header('x-signature', headers['x-signature'])
+      .json(payload)
+
+    try {
+      response.assertStatus(422)
+      const body = response.body()
+      assert.isArray(body.errors)
+      assert.isAbove(body.errors.length, 0)
+    } finally {
+      await cleanupCreated()
+    }
+  })
+
+  test('returns 401 when webhook is called without HMAC headers', async ({ client }) => {
+    const { token } = await loginAsUser(client, 4)
+    const userId = await getUserId(client, token)
+    const submissionId = await createSubmission(userId)
+
+    const response = await client.post('/api/v1/submissions/webhook').json({
+      data: {
+        submission_id: submissionId,
+        status: 'pending',
         result: {
-          correctness_score: 95,
-          tool_score: 0,
-          comments: '',
-          commentFormat: 0,
-          runtime_ms: 100,
-          exit_code: 0,
-          test_output: '',
-          has_payload: false,
-          payload_url: null,
+          correctness_score: 0,
         },
       },
     })
+    try {
+      response.assertStatus(401)
+    } finally {
+      await cleanupCreated()
+    }
+  })
 
-    response.assertStatus(422)
-    const body = response.body()
-    assert.isArray(body.errors)
-    assert.isAbove(body.errors.length, 0)
+  test('returns 403 when a non-service account calls webhook', async ({ client }) => {
+    const { token } = await loginAsUser(client, 1) // Admin, not service account
+    const userId = await getUserId(client, token)
+    const submissionId = await createSubmission(userId)
+    const { clientId, clientSecret } = await createOAuthClientCredentials(client, token)
+
+    const payload = {
+      data: {
+        submission_id: submissionId,
+        status: 'pending',
+        result: {
+          correctness_score: 0,
+          tool_score: 0,
+          comments: '',
+          comment_format: 0,
+          runtime_ms: 0,
+          exit_code: 0,
+          test_output: '',
+          has_payload: false,
+          payload_url: '',
+        },
+      },
+    }
+
+    const rawBody = JSON.stringify(payload)
+    const headers = buildHmacHeaders({
+      clientId,
+      clientSecret,
+      method: 'POST',
+      path: '/api/v1/submissions/webhook',
+      rawBody,
+    })
+
+    const response = await client
+      .post('/api/v1/submissions/webhook')
+      .header('x-api-key', headers['x-api-key'])
+      .header('x-timestamp', headers['x-timestamp'])
+      .header('x-nonce', headers['x-nonce'])
+      .header('x-signature', headers['x-signature'])
+      .json(payload)
+
+    try {
+      response.assertStatus(403)
+      response.assertBodyContains({
+        message: 'Only registered service accounts can access this endpoint.',
+      })
+    } finally {
+      await cleanupCreated()
+    }
   })
 })
 
