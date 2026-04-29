@@ -13,7 +13,6 @@ jobs:
   # ── Frontend Build Validation ───────────────────────────────────────
   validate-frontend-build:
     runs-on: ubuntu-latest
-    name: Validate Frontend Docker Build
 
     steps:
       - name: checkout repo
@@ -35,7 +34,6 @@ jobs:
   # ── Backend Build Validation ────────────────────────────────────────
   validate-backend-build:
     runs-on: ubuntu-latest
-    name: Validate Backend Docker Build
 
     steps:
       - name: checkout repo

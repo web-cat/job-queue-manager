@@ -57,15 +57,21 @@ export interface ExternalJobPayload {
  *
  */
 export default class JobQueueService {
-  private readonly baseUrl: string
-
-  constructor() {
-    this.baseUrl = this.getRequiredBaseUrl()
-  }
-
   private getRequiredBaseUrl(): string {
-    const baseUrl = env.get('JOB_QUEUE_API_URL')
+    // Prefer raw process.env value if present (allows tests to control runtime env)
+    const raw = process.env.JOB_QUEUE_API_URL
+    if (typeof raw === 'string' && raw.trim() !== '') {
+      return raw.trim()
+    }
 
+    // If running tests and the env var was explicitly removed, treat that as
+    // authoritative and return empty so tests can simulate the service being
+    // unavailable even if the Adonis Env service cached a value at startup.
+    if (process.env.NODE_ENV === 'test' && typeof raw === 'undefined') {
+      return ''
+    }
+
+    const baseUrl = env.get('JOB_QUEUE_API_URL')
     if (typeof baseUrl !== 'string' || baseUrl.trim() === '') {
       return ''
     }
@@ -84,12 +90,13 @@ export default class JobQueueService {
   }
 
   async listImages(): Promise<any[] | null> {
-    if (!this.baseUrl) {
+    const baseUrl = this.getRequiredBaseUrl()
+    if (!baseUrl) {
       return null
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/images`, {
+      const response = await fetch(`${baseUrl}/images`, {
         headers: this.getRequestHeaders(),
       })
 
@@ -107,12 +114,13 @@ export default class JobQueueService {
   }
 
   async updateImageConfig(imageId: number, payload: Record<string, unknown>): Promise<any | null> {
-    if (!this.baseUrl) {
+    const baseUrl = this.getRequiredBaseUrl()
+    if (!baseUrl) {
       return null
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/images/${imageId}`, {
+      const response = await fetch(`${baseUrl}/images/${imageId}`, {
         method: 'PUT',
         headers: {
           ...this.getRequestHeaders(),
@@ -182,8 +190,13 @@ export default class JobQueueService {
       const fileBlob = new Blob([fileBuffer], { type: 'application/zip' })
       formData.append('files', fileBlob, `submission_${submissionId}.zip`)
 
+      const baseUrl = this.getRequiredBaseUrl()
+      if (!baseUrl) {
+        return { success: false }
+      }
+
       // Send the heavy request to the other team
-      const response = await fetch(`${this.baseUrl}/jobs`, {
+      const response = await fetch(`${baseUrl}/jobs`, {
         method: 'POST',
         // Note: Do NOT set the 'Content-Type' header manually when using FormData.
         // fetch will automatically set it to 'multipart/form-data' with the correct boundary.
@@ -229,7 +242,10 @@ export default class JobQueueService {
   async checkStatus(jobId: number): Promise<any | null> {
     console.info(`[JobQueueService] Checking status for job ${jobId} via execution API`)
     try {
-      const response = await fetch(`${this.baseUrl}/jobs/${jobId}`)
+      const baseUrl = this.getRequiredBaseUrl()
+      if (!baseUrl) return null
+
+      const response = await fetch(`${baseUrl}/jobs/${jobId}`)
       if (!response.ok) return null
       return await response.json()
     } catch (error) {
@@ -241,12 +257,13 @@ export default class JobQueueService {
    * Get overall queue status (pending/processing counts, active workers, etc.)
    */
   async getQueueStatus(): Promise<any | null> {
-    if (!this.baseUrl) {
+    const baseUrl = this.getRequiredBaseUrl()
+    if (!baseUrl) {
       return null
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/queue/status`, {
+      const response = await fetch(`${baseUrl}/queue/status`, {
         headers: this.getRequestHeaders(),
       })
       if (!response.ok) return null
@@ -261,12 +278,13 @@ export default class JobQueueService {
    * Get HRRN position and metadata for a job in the remote queue
    */
   async getQueuePosition(jobId: number): Promise<any | null> {
-    if (!this.baseUrl) {
+    const baseUrl = this.getRequiredBaseUrl()
+    if (!baseUrl) {
       return null
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/queue/position/${jobId}`, {
+      const response = await fetch(`${baseUrl}/queue/position/${jobId}`, {
         headers: this.getRequestHeaders(),
       })
       if (!response.ok) return null
@@ -281,12 +299,13 @@ export default class JobQueueService {
    * List active worker nodes / agents in the execution cluster
    */
   async listWorkers(): Promise<any | null> {
-    if (!this.baseUrl) {
+    const baseUrl = this.getRequiredBaseUrl()
+    if (!baseUrl) {
       return null
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/workers`, {
+      const response = await fetch(`${baseUrl}/workers`, {
         headers: this.getRequestHeaders(),
       })
       if (!response.ok) return null
@@ -304,7 +323,10 @@ export default class JobQueueService {
     try {
       // Fetch the zip file from their cluster
       // Note: payloadUrl is likely a relative path like "/jobs/142/payload"
-      const response = await fetch(`${this.baseUrl}${payloadUrl}`)
+      const baseUrl = this.getRequiredBaseUrl()
+      if (!baseUrl) return null
+
+      const response = await fetch(`${baseUrl}${payloadUrl}`)
 
       if (!response.ok) {
         console.error(`[JobQueueService] Failed to download payload: ${response.statusText}`)
