@@ -53,7 +53,7 @@ jobs:
       - name: build and push backend
         uses: docker/build-push-action@v6
         with:
-          context: ./backend
+          context: .
           file: ./backend/Dockerfile
           push: true
           provenance: false

@@ -1,5 +1,4 @@
 import { test } from '@japa/runner'
-import nock from 'nock'
 import db from '@adonisjs/lucid/services/db'
 import User from '#models/user'
 import { createHash, createHmac, randomUUID } from 'node:crypto'
@@ -163,20 +162,6 @@ async function cleanupCreated() {
   }
 }
 
-// Helper to mock grading-cluster endpoints using `nock`.
-// Usage example:
-//   const scope = mockGraderStatus('online')
-//   // run code that calls grading cluster
-//   scope.done()
-function mockGraderStatus(mode: 'online' | 'restricted' | 'offline' = 'online') {
-  const base = process.env.GRADER_BASE_URL || 'http://grading.cluster'
-  const scope = nock(base).get('/api/administration/execution/queue/status').query(true)
-
-  if (mode === 'online') return scope.reply(200, { status: 'ok', workers: 2, queueLength: 1 })
-  if (mode === 'restricted') return scope.reply(403, { error: 'forbidden' })
-  return scope.reply(500, { error: 'down' })
-}
-
 // Helper to get the current user id from token
 async function getUserId(client: any, token: string) {
   const me = await client.get('/api/auth/me').header('Authorization', `Bearer ${token}`)
@@ -237,7 +222,7 @@ test.group('Submissions — index', () => {
   })
 })
 
-test.group('Submissions — show', (group) => {
+test.group('Submissions — show', () => {
   test('returns a single submission', async ({ client }) => {
     const { token } = await loginAsUser(client)
     const userId = await getUserId(client, token)
@@ -272,7 +257,7 @@ test.group('Submissions — show', (group) => {
   })
 })
 
-test.group('Submissions — result', (group) => {
+test.group('Submissions — result', () => {
   test('returns not ready when feedback is not ready', async ({ client }) => {
     const { token } = await loginAsUser(client)
     const userId = await getUserId(client, token)
@@ -297,7 +282,7 @@ test.group('Submissions — result', (group) => {
   })
 })
 
-test.group('Submissions — webhook', (group) => {
+test.group('Submissions — webhook', () => {
   test('accepts webhook payload and returns received', async ({ client, assert }) => {
     const { token } = await loginAsUser(client, 4)
     const userId = await getUserId(client, token)

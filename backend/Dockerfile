@@ -1,17 +1,27 @@
 FROM node:24-trixie-slim AS build
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm ci
+RUN corepack enable
 
-COPY . .
-RUN node ace build 
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY backend/package.json ./backend/
+
+RUN pnpm install --frozen-lockfile --filter backend
+
+COPY backend ./backend
+RUN pnpm --filter backend build
 
 FROM node:24-trixie-slim
 WORKDIR /app
 
-COPY --from=build /app/build ./
-RUN npm ci --omit=dev
+RUN corepack enable
+
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY backend/package.json ./backend/
+
+RUN pnpm install --frozen-lockfile --prod --filter backend
+
+COPY --from=build /app/backend/build ./backend/build
 EXPOSE 3333
 
-CMD ["node", "bin/server.js"]
+CMD ["node", "backend/bin/server.js"]
