@@ -1,7 +1,6 @@
 import { defineConfig } from '@adonisjs/auth'
 import { tokensGuard, tokensUserProvider } from '@adonisjs/auth/access_tokens'
 import type { InferAuthenticators, InferAuthEvents, Authenticators } from '@adonisjs/auth/types'
-import { HmacGuard } from '#auth/guards/hmac_guard'
 
 const authConfig = defineConfig({
   default: 'api',
@@ -12,7 +11,6 @@ const authConfig = defineConfig({
         model: () => import('#models/user'),
       }),
     }),
-    hmac: (ctx) => new HmacGuard(ctx),
   },
 })
 

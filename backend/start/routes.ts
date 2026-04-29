@@ -42,6 +42,7 @@ router.where('id', router.matchers.number())
 router.where('sectionId', router.matchers.number())
 router.where('userId', router.matchers.number())
 router.where('imageId', router.matchers.number())
+router.where('offeringId', router.matchers.number())
 
 // ── Health check ──────────────────────────────────────────────────────
 router.get('/', async () => {
@@ -96,12 +97,17 @@ function registerApiRoutes(prefix: string = '') {
   // Submissions
   router.get('/submissions/:id/result', [SubmissionsController, 'result'])
   router.get('/submissions/:id/download-url', [SubmissionsController, 'downloadUrl'])
+  // router
+  //   .get('/submissions/:id/download', [SubmissionsController, 'download'])
+  //   .as(`${prefix}submissions.download`)
   router.resource('submissions', SubmissionsController).apiOnly().as(`${prefix}submissions`)
 
   // Assignments
   router.get('/assignments/:id/offerings', [AssignmentsController, 'offerings'])
   router.post('/assignments/:id/offerings', [AssignmentsController, 'createOffering'])
+  router.patch('/assignments/:id/offerings/:offeringId', [AssignmentsController, 'updateOffering'])
   router.resource('assignments', AssignmentsController).apiOnly().as(`${prefix}assignments`)
+  router.get('/assignments/:id/wait-time', [AssignmentsController, 'waitTime'])
 
   // Courses
   router.get('/courses/:id/sections', [CoursesController, 'sections'])
@@ -168,4 +174,4 @@ router
       .use(middleware.serviceAccount())
   })
   .prefix('/api/v1')
-  .use(middleware.auth({ guards: ['hmac'] }))
+  .use(middleware.oauthSignature())

@@ -64,6 +64,8 @@ async function createSubmission(userId: number) {
       feedback_ready: false,
       is_submission_for_grading: true,
       partner_link: false,
+      status: 'pending',
+      retry_count: 0,
     })
     .returning('id')
 

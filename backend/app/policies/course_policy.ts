@@ -6,7 +6,7 @@ import { BasePolicy } from '@adonisjs/bouncer'
 
 export default class CoursePolicy extends BasePolicy {
   async create(user: User) {
-    return user.globalRoleId === 1
+    return user.globalRoleId === 1 || user.globalRoleId === 2
   }
 
   async view(user: User, course: Course) {
@@ -24,7 +24,14 @@ export default class CoursePolicy extends BasePolicy {
   }
 
   async createSection(user: User) {
-    return user.globalRoleId === 1
+    // Existing: admin or global instructor
+    if (user.globalRoleId === 1 || user.globalRoleId === 2) return true
+    // Additive: course-level instructor in any section
+    const enrollment = await CourseEnrollment.query()
+      .where('user_id', user.id)
+      .where('course_role_id', 1)
+      .first()
+    return !!enrollment
   }
 
   async manageEnrollments(user: User, section: Section) {

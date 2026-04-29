@@ -10,14 +10,39 @@ const { data: assignment, pending } = await useAsyncData(
   () => get<any>(`/assignments/${route.params.id}`),
 );
 
+const offering = computed(() => {
+  const offerings = assignment.value?.assignmentOfferings;
+  if (!offerings?.length) return null;
+  const sectionId = Number(route.query.sectionId);
+  return offerings.find((o: any) => o.courseOfferingId === sectionId) ?? offerings[0];
+});
+
+function formatDueDate(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return d.toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  });
+}
+
+function dueUrgency(iso: string | null | undefined): 'past' | 'soon' | 'ok' | null {
+  if (!iso) return null;
+  const diff = new Date(iso).getTime() - Date.now();
+  if (diff < 0) return 'past';
+  if (diff < 48 * 60 * 60 * 1000) return 'soon';
+  return 'ok';
+}
+
 const {
   data: submissions,
   pending: pendingSubmissions,
   refresh: refreshSubmissions,
-} = await useAsyncData(`assignment-${route.params.id}-submissions`, () =>
-  get<{ data: any[] }>(`/submissions?workoutId=${route.params.id}`)
+} = await useAsyncData(
+  `assignment-${route.params.id}-submissions`,
+  () => get<{ data: any[] }>(`/submissions?workoutId=${route.params.id}`)
     .then((r) => r.data)
-    .catch(() => []),
+    .catch(() => [])
 );
 
 const submitting = ref(false);
@@ -183,9 +208,22 @@ async function handleSubmit() {
               class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 flex items-center gap-6 text-sm text-gray-500 font-mono"
             >
               <span>ID: {{ assignment.id }}</span>
-              <span v-if="assignment.submissionPolicy">
+              <span>
                 Max attempts:
-                {{ assignment.submissionPolicy.maxSubmissions ?? "∞" }}
+                {{ offering?.attemptLimit ?? assignment.submissionPolicy?.maxSubmits ?? "∞" }}
+              </span>
+              <span
+                v-if="offering?.dueAt"
+                class="flex items-center gap-1.5 font-sans text-xs font-medium"
+                :class="{
+                  'text-red-500 dark:text-red-400': dueUrgency(offering.dueAt) === 'past',
+                  'text-amber-500 dark:text-amber-400': dueUrgency(offering.dueAt) === 'soon',
+                  'text-gray-400 dark:text-gray-500': dueUrgency(offering.dueAt) === 'ok',
+                }"
+              >
+                <UIcon name="i-heroicons-clock" class="w-3.5 h-3.5" />
+                {{ dueUrgency(offering.dueAt) === 'past' ? 'Was due' : 'Due' }}
+                {{ formatDueDate(offering.dueAt) }}
               </span>
             </div>
           </div>
