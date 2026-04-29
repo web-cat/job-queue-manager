@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import User from '#models/user'
+import { createHmac, createHash, randomUUID } from 'node:crypto'
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -16,6 +17,53 @@ async function loginAsUser(client: any) {
   user.globalRoleId = 1
   await user.save()
   return { token: register.body().token.token, email, userId: user.id }
+}
+
+async function createOAuthClient(client: any, token: string, name?: string) {
+  const response = await client
+    .post('/api/oauth/clients')
+    .header('Authorization', `Bearer ${token}`)
+    .json({ name: name ?? `webhook-client-${Date.now()}` })
+
+  return response.body()
+}
+
+function signRequest(
+  clientSecret: string,
+  method: string,
+  path: string,
+  body: string = ''
+): { timestamp: string; nonce: string; signature: string } {
+  const timestamp = Date.now().toString()
+  const nonce = randomUUID()
+  const bodyHash = createHash('sha256').update(body).digest('hex')
+  const canonical = [method.toUpperCase(), path, timestamp, nonce, bodyHash].join('\n')
+  const signature = createHmac('sha256', clientSecret).update(canonical).digest('hex')
+  return { timestamp, nonce, signature }
+}
+
+async function createServiceAccountOAuthClient(client: any) {
+  const { token, email } = await loginAsUser(client)
+  const user = await User.findByOrFail('email', email)
+  user.globalRoleId = 4
+  await user.save()
+
+  const created = await createOAuthClient(client, token, `service-account-${Date.now()}`)
+  return { clientId: created.client_id as string, clientSecret: created.client_secret as string }
+}
+
+async function postSignedWebhook(client: any, creds: any, payload: any) {
+  const path = '/api/v1/submissions/webhook'
+  const body = JSON.stringify(payload)
+  const { timestamp, nonce, signature } = signRequest(creds.clientSecret, 'POST', path, body)
+
+  return client
+    .post(path)
+    .header('x-api-key', creds.clientId)
+    .header('x-timestamp', timestamp)
+    .header('x-nonce', nonce)
+    .header('x-signature', signature)
+    .json(payload)
 }
 
 async function createSubmission(userId: number, status: string = 'pending') {
@@ -107,12 +155,13 @@ test.group('Submissions — result when ready', () => {
 
 test.group('Submissions — webhook full result payload', () => {
   test('processes completed webhook and updates submission result', async ({ client, assert }) => {
+    const creds = await createServiceAccountOAuthClient(client)
     const { userId } = await loginAsUser(client)
     const { submissionId, resultId } = await createSubmission(userId, 'pending')
 
     const now = new Date().toISOString()
 
-    const response = await client.post('/api/submissions/webhook').json({
+    const response = await postSignedWebhook(client, creds, {
       data: {
         submission_id: submissionId,
         status: 'completed',
@@ -124,7 +173,7 @@ test.group('Submissions — webhook full result payload', () => {
           correctness_score: 92,
           tool_score: 88,
           comments: '1 test case failed.',
-          comment_format: '0',
+          comment_format: 0,
           runtime_ms: 1500,
           exit_code: 0,
           test_output: 'TestAdd: PASS\nTestEdge: FAIL',
@@ -150,12 +199,13 @@ test.group('Submissions — webhook full result payload', () => {
   })
 
   test('processes failed webhook and updates status', async ({ client, assert }) => {
+    const creds = await createServiceAccountOAuthClient(client)
     const { userId } = await loginAsUser(client)
     const { submissionId } = await createSubmission(userId, 'pending')
 
     const now = new Date().toISOString()
 
-    const response = await client.post('/api/submissions/webhook').json({
+    const response = await postSignedWebhook(client, creds, {
       data: {
         submission_id: submissionId,
         status: 'failed',
@@ -163,6 +213,7 @@ test.group('Submissions — webhook full result payload', () => {
         started_at: now,
         completed_at: now,
         retry_count: 3,
+        result: {},
       },
     })
 
@@ -174,7 +225,9 @@ test.group('Submissions — webhook full result payload', () => {
   })
 
   test('rejects webhook missing submission_id', async ({ client }) => {
-    const response = await client.post('/api/submissions/webhook').json({
+    const creds = await createServiceAccountOAuthClient(client)
+
+    const response = await postSignedWebhook(client, creds, {
       data: {
         status: 'completed',
       },
@@ -183,7 +236,9 @@ test.group('Submissions — webhook full result payload', () => {
   })
 
   test('rejects webhook with missing data wrapper', async ({ client }) => {
-    const response = await client.post('/api/submissions/webhook').json({
+    const creds = await createServiceAccountOAuthClient(client)
+
+    const response = await postSignedWebhook(client, creds, {
       submission_id: 1,
       status: 'completed',
     })
