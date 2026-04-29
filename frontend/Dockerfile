@@ -30,6 +30,18 @@ FROM node:22-bookworm-slim
 
 WORKDIR /app
 
+# Install pnpm
+RUN npm install -g pnpm
+
+# Copy workspace config for pnpm
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+
+# Copy frontend package.json
+COPY frontend/package.json ./frontend/
+
+# Install only production dependencies (including @iconify-json packages needed for icon serving)
+RUN pnpm install --frozen-lockfile --prod --filter frontend
+
 # Copy built output from build stage
 COPY --from=build /app/frontend/.output ./
 

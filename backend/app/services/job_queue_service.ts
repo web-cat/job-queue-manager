@@ -241,8 +241,14 @@ export default class JobQueueService {
    * Get overall queue status (pending/processing counts, active workers, etc.)
    */
   async getQueueStatus(): Promise<any | null> {
+    if (!this.baseUrl) {
+      return null
+    }
+
     try {
-      const response = await fetch(`${this.baseUrl}/queue/status`)
+      const response = await fetch(`${this.baseUrl}/queue/status`, {
+        headers: this.getRequestHeaders(),
+      })
       if (!response.ok) return null
       return await response.json()
     } catch (error) {
@@ -255,8 +261,14 @@ export default class JobQueueService {
    * Get HRRN position and metadata for a job in the remote queue
    */
   async getQueuePosition(jobId: number): Promise<any | null> {
+    if (!this.baseUrl) {
+      return null
+    }
+
     try {
-      const response = await fetch(`${this.baseUrl}/queue/position/${jobId}`)
+      const response = await fetch(`${this.baseUrl}/queue/position/${jobId}`, {
+        headers: this.getRequestHeaders(),
+      })
       if (!response.ok) return null
       return await response.json()
     } catch (error) {
@@ -269,8 +281,14 @@ export default class JobQueueService {
    * List active worker nodes / agents in the execution cluster
    */
   async listWorkers(): Promise<any | null> {
+    if (!this.baseUrl) {
+      return null
+    }
+
     try {
-      const response = await fetch(`${this.baseUrl}/workers`)
+      const response = await fetch(`${this.baseUrl}/workers`, {
+        headers: this.getRequestHeaders(),
+      })
       if (!response.ok) return null
       return await response.json()
     } catch (error) {
