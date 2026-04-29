@@ -2,13 +2,15 @@ import type { HttpContext } from '@adonisjs/core/http'
 import JobQueueService from '#services/job_queue_service'
 
 export default class ExecutionServiceController {
-  private service = new JobQueueService()
+  private getService() {
+    return new JobQueueService()
+  }
 
   /**
    * GET /api/administration/execution/queue/status
    */
   async queueStatus({ response }: HttpContext) {
-    const data = await this.service.getQueueStatus()
+    const data = await this.getService().getQueueStatus()
     if (!data)
       return response
         .status(503)
@@ -27,7 +29,7 @@ export default class ExecutionServiceController {
         .send({ error: { code: 'invalid_job_id', message: 'jobId must be a positive integer' } })
     }
 
-    const data = await this.service.getQueuePosition(jobId)
+    const data = await this.getService().getQueuePosition(jobId)
     if (!data)
       return response
         .status(404)
@@ -39,7 +41,7 @@ export default class ExecutionServiceController {
    * GET /api/administration/execution/workers
    */
   async workers({ response }: HttpContext) {
-    const data = await this.service.listWorkers()
+    const data = await this.getService().listWorkers()
     if (!data)
       return response
         .status(503)

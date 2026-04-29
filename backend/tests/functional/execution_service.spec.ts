@@ -62,6 +62,9 @@ test.group('Admin / Execution Service — queue status', () => {
   test('returns 503 when execution service is unavailable', async ({ client }) => {
     const { token } = await loginAsAdmin(client)
 
+    // Ensure test is deterministic: unset external JOB_QUEUE_API_URL so service reports unavailable
+    delete process.env.JOB_QUEUE_API_URL
+
     const response = await client
       .get('/api/administration/execution/queue/status')
       .header('Authorization', `Bearer ${token}`)
@@ -145,6 +148,9 @@ test.group('Admin / Execution Service — queue position', () => {
 test.group('Admin / Execution Service — workers', () => {
   test('returns 503 when execution service is unavailable', async ({ client }) => {
     const { token } = await loginAsAdmin(client)
+
+    // Ensure test is deterministic: unset external JOB_QUEUE_API_URL so service reports unavailable
+    delete process.env.JOB_QUEUE_API_URL
 
     const response = await client
       .get('/api/administration/execution/workers')

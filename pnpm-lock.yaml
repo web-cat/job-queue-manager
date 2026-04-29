@@ -119,6 +119,12 @@ importers:
 
   frontend:
     dependencies:
+      '@iconify-json/heroicons':
+        specifier: ^1.2.3
+        version: 1.2.3
+      '@iconify-json/lucide':
+        specifier: ^1.2.1
+        version: 1.2.104
       '@nuxt/icon':
         specifier: ^1.14.2
         version: 1.15.0(magicast@0.5.2)(vite@7.3.2(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))(vue@3.5.30(typescript@6.0.2))
@@ -149,13 +155,6 @@ importers:
       vue-router:
         specifier: ^5.0.3
         version: 5.0.3(@vue/compiler-sfc@3.5.32)(pinia@3.0.4(typescript@6.0.2)(vue@3.5.30(typescript@6.0.2)))(vue@3.5.30(typescript@6.0.2))
-    devDependencies:
-      '@iconify-json/heroicons':
-        specifier: ^1.2.3
-        version: 1.2.3
-      '@iconify-json/lucide':
-        specifier: ^1.2.1
-        version: 1.2.104
 
   packages/cli:
     dependencies:
