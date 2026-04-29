@@ -22,6 +22,7 @@ COPY backend/package.json ./backend/
 RUN pnpm install --frozen-lockfile --prod --filter ./backend...
 
 COPY --from=build /app/backend/build ./backend/build
+WORKDIR /app/backend/build
 EXPOSE 3333
 
-CMD ["node", "backend/bin/server.js"]
+CMD ["node", "bin/server.js"]
