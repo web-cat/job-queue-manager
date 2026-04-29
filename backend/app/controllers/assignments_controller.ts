@@ -24,7 +24,6 @@ import JobQueueService from '#services/job_queue_service'
 import CourseEnrollment from '#models/course_enrollment'
 import { DateTime } from 'luxon'
 import logger from '@adonisjs/core/services/logger'
-import CourseEnrollment from '#models/course_enrollment'
 import AssignmentPolicy from '#policies/assignment_policy'
 import db from '@adonisjs/lucid/services/db'
 
@@ -135,28 +134,24 @@ export default class AssignmentsController {
           })
         } else {
           // Students — must have a published offering to see it
-          q
-            .where((sq) => {
-              // Public assignments: only if at least one offering is published
-              sq
-                .where('is_public', true)
-                .whereHas('assignmentOfferings', (oq) => oq.where('published', true))
+          q.where((sq) => {
+            // Public assignments: only if at least one offering is published
+            sq.where('is_public', true).whereHas('assignmentOfferings', (oq) =>
+              oq.where('published', true)
+            )
+          }).orWhereHas('assignmentOfferings', (offeringQuery) => {
+            // Enrolled sections: only published offerings
+            offeringQuery.where('published', true).whereExists((subq) => {
+              subq
+                .select('id')
+                .from('course_enrollment')
+                .whereColumn(
+                  'course_enrollment.course_offering_id',
+                  'assignment_offering.course_offering_id'
+                )
+                .where('course_enrollment.user_id', user.id)
             })
-            .orWhereHas('assignmentOfferings', (offeringQuery) => {
-              // Enrolled sections: only published offerings
-              offeringQuery
-                .where('published', true)
-                .whereExists((subq) => {
-                  subq
-                    .select('id')
-                    .from('course_enrollment')
-                    .whereColumn(
-                      'course_enrollment.course_offering_id',
-                      'assignment_offering.course_offering_id'
-                    )
-                    .where('course_enrollment.user_id', user.id)
-                })
-            })
+          })
         }
       })
       .preload('submissionPolicy')
@@ -287,7 +282,9 @@ export default class AssignmentsController {
     const data = await request.validateUsing(updateOfferingValidator)
 
     offering.merge({
-      availableFrom: data.availableFrom ? DateTime.fromISO(data.availableFrom) : offering.availableFrom,
+      availableFrom: data.availableFrom
+        ? DateTime.fromISO(data.availableFrom)
+        : offering.availableFrom,
       dueAt: data.dueAt ? DateTime.fromISO(data.dueAt) : offering.dueAt,
       acceptUntil: data.acceptUntil ? DateTime.fromISO(data.acceptUntil) : offering.acceptUntil,
       published: data.published ?? offering.published,
