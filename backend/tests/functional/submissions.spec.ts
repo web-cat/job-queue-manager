@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import nock from 'nock'
 import db from '@adonisjs/lucid/services/db'
 import User from '#models/user'
 import { createHash, createHmac, randomUUID } from 'node:crypto'
@@ -66,6 +67,12 @@ async function createSubmission(userId: number) {
     })
     .returning('id')
 
+  // track created rows for cleanup
+  createdSubmissionIds.push(submission.id)
+  createdAssignmentIds.push(assignment.id)
+  createdPolicyIds.push(policy.id)
+  createdResultIds.push(result.id)
+
   return submission.id
 }
 
@@ -115,7 +122,57 @@ async function createSubmissionWithAssignmentOptions(
     })
     .returning('id')
 
+  // track created rows for cleanup
+  createdSubmissionIds.push(submission.id)
+  createdAssignmentIds.push(assignment.id)
+  createdPolicyIds.push(policy.id)
+  createdResultIds.push(result.id)
+
   return { submissionId: submission.id, assignmentId: assignment.id }
+}
+
+// Track created DB entities so tests can clean up after themselves
+const createdSubmissionIds: number[] = []
+const createdAssignmentIds: number[] = []
+const createdPolicyIds: number[] = []
+const createdResultIds: number[] = []
+// Helper to cleanup created rows. Call from test `finally` blocks.
+async function cleanupCreated() {
+  try {
+    if (createdSubmissionIds.length) {
+      await db.from('submission').whereIn('id', createdSubmissionIds).del()
+    }
+    if (createdAssignmentIds.length) {
+      await db.from('assignment').whereIn('id', createdAssignmentIds).del()
+    }
+    if (createdPolicyIds.length) {
+      await db.from('submission_policy').whereIn('id', createdPolicyIds).del()
+    }
+    if (createdResultIds.length) {
+      await db.from('submission_result').whereIn('id', createdResultIds).del()
+    }
+  } catch (e) {
+    console.warn('cleanup error', e)
+  } finally {
+    createdSubmissionIds.length = 0
+    createdAssignmentIds.length = 0
+    createdPolicyIds.length = 0
+    createdResultIds.length = 0
+  }
+}
+
+// Helper to mock grading-cluster endpoints using `nock`.
+// Usage example:
+//   const scope = mockGraderStatus('online')
+//   // run code that calls grading cluster
+//   scope.done()
+function mockGraderStatus(mode: 'online' | 'restricted' | 'offline' = 'online') {
+  const base = process.env.GRADER_BASE_URL || 'http://grading.cluster'
+  const scope = nock(base).get('/api/administration/execution/queue/status').query(true)
+
+  if (mode === 'online') return scope.reply(200, { status: 'ok', workers: 2, queueLength: 1 })
+  if (mode === 'restricted') return scope.reply(403, { error: 'forbidden' })
+  return scope.reply(500, { error: 'down' })
 }
 
 // Helper to get the current user id from token
@@ -178,18 +235,23 @@ test.group('Submissions — index', () => {
   })
 })
 
-test.group('Submissions — show', () => {
+test.group('Submissions — show', (group) => {
   test('returns a single submission', async ({ client }) => {
     const { token } = await loginAsUser(client)
     const userId = await getUserId(client, token)
-    const submissionId = await createSubmission(userId)
+    let submissionId
+    try {
+      submissionId = await createSubmission(userId)
 
-    const response = await client
-      .get(`/api/submissions/${submissionId}`)
-      .header('Authorization', `Bearer ${token}`)
+      const response = await client
+        .get(`/api/submissions/${submissionId}`)
+        .header('Authorization', `Bearer ${token}`)
 
-    response.assertStatus(200)
-    response.assertBodyContains({ id: submissionId })
+      response.assertStatus(200)
+      response.assertBodyContains({ id: submissionId })
+    } finally {
+      await cleanupCreated()
+    }
   })
 
   test('returns 404 for non-existent submission', async ({ client }) => {
@@ -208,18 +270,23 @@ test.group('Submissions — show', () => {
   })
 })
 
-test.group('Submissions — result', () => {
+test.group('Submissions — result', (group) => {
   test('returns not ready when feedback is not ready', async ({ client }) => {
     const { token } = await loginAsUser(client)
     const userId = await getUserId(client, token)
-    const submissionId = await createSubmission(userId)
+    let submissionId
+    try {
+      submissionId = await createSubmission(userId)
 
-    const response = await client
-      .get(`/api/submissions/${submissionId}/result`)
-      .header('Authorization', `Bearer ${token}`)
+      const response = await client
+        .get(`/api/submissions/${submissionId}/result`)
+        .header('Authorization', `Bearer ${token}`)
 
-    response.assertStatus(200)
-    response.assertBodyContains({ ready: false })
+      response.assertStatus(200)
+      response.assertBodyContains({ ready: false })
+    } finally {
+      await cleanupCreated()
+    }
   })
 
   test('returns 401 when not authenticated', async ({ client }) => {
@@ -228,7 +295,7 @@ test.group('Submissions — result', () => {
   })
 })
 
-test.group('Submissions — webhook', () => {
+test.group('Submissions — webhook', (group) => {
   test('accepts webhook payload and returns received', async ({ client, assert }) => {
     const { token } = await loginAsUser(client, 4)
     const userId = await getUserId(client, token)
@@ -270,11 +337,15 @@ test.group('Submissions — webhook', () => {
       .header('x-signature', headers['x-signature'])
       .json(payload)
 
-    response.assertStatus(200)
-    response.assertBodyContains({ received: true })
+    try {
+      response.assertStatus(200)
+      response.assertBodyContains({ received: true })
 
-    const updatedSubmission = await db.from('submission').where('id', submissionId).first()
-    assert.equal(updatedSubmission?.status, 'pending')
+      const updatedSubmission = await db.from('submission').where('id', submissionId).first()
+      assert.equal(updatedSubmission?.status, 'pending')
+    } finally {
+      await cleanupCreated()
+    }
   })
 
   test('updates the assignment runtime estimate from webhook results', async ({
@@ -325,9 +396,14 @@ test.group('Submissions — webhook', () => {
       .json(payload)
 
     response.assertStatus(200)
+    try {
+      response.assertStatus(200)
 
-    const updatedAssignment = await db.from('assignment').where('id', assignmentId).first()
-    assert.equal(updatedAssignment?.estimated_runtime_seconds, 64)
+      const updatedAssignment = await db.from('assignment').where('id', assignmentId).first()
+      assert.equal(updatedAssignment?.estimated_runtime_seconds, 64)
+    } finally {
+      await cleanupCreated()
+    }
   })
 
   test('returns 422 when required result object is missing', async ({ client, assert }) => {
@@ -364,10 +440,14 @@ test.group('Submissions — webhook', () => {
       .header('x-signature', headers['x-signature'])
       .json(payload)
 
-    response.assertStatus(422)
-    const body = response.body()
-    assert.isArray(body.errors)
-    assert.isAbove(body.errors.length, 0)
+    try {
+      response.assertStatus(422)
+      const body = response.body()
+      assert.isArray(body.errors)
+      assert.isAbove(body.errors.length, 0)
+    } finally {
+      await cleanupCreated()
+    }
   })
 
   test('returns 401 when webhook is called without HMAC headers', async ({ client }) => {
@@ -384,8 +464,11 @@ test.group('Submissions — webhook', () => {
         },
       },
     })
-
-    response.assertStatus(401)
+    try {
+      response.assertStatus(401)
+    } finally {
+      await cleanupCreated()
+    }
   })
 
   test('returns 403 when a non-service account calls webhook', async ({ client }) => {
@@ -429,10 +512,14 @@ test.group('Submissions — webhook', () => {
       .header('x-signature', headers['x-signature'])
       .json(payload)
 
-    response.assertStatus(403)
-    response.assertBodyContains({
-      message: 'Only registered service accounts can access this endpoint.',
-    })
+    try {
+      response.assertStatus(403)
+      response.assertBodyContains({
+        message: 'Only registered service accounts can access this endpoint.',
+      })
+    } finally {
+      await cleanupCreated()
+    }
   })
 })
 
