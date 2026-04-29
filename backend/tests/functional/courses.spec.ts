@@ -27,7 +27,7 @@ async function loginAsUser(client: any) {
     email,
     password: 'password123',
   })
-  
+
   // Promote user to Admin to pass Bouncer RBAC during tests
   const user = await User.findByOrFail('email', email)
   user.globalRoleId = 1

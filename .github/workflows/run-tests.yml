@@ -18,7 +18,7 @@ jobs:
         image: postgres:15
         env:
           POSTGRES_USER: user
-          POSTGRES_PASSWORD: webcatmaxxing
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           POSTGRES_DB: postgres
         ports:
           - 5432:5432

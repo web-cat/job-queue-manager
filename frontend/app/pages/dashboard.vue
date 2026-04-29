@@ -4,7 +4,35 @@ import { useAuthStore } from "#imports";
 definePageMeta({ middleware: "auth" });
 
 const authStore = useAuthStore();
+const config = useRuntimeConfig();
 const { get } = useApi();
+
+type ServiceStatusState =
+  | "loading"
+  | "online"
+  | "offline"
+  | "restricted"
+  | "cluster-only";
+
+type ServiceStatus = {
+  state: ServiceStatusState;
+  label: string;
+  detail: string;
+};
+
+const apiStatus = ref<ServiceStatus>({
+  state: "loading",
+  label: "Checking...",
+  detail: "Probing the backend root endpoint",
+});
+
+const queueStatus = ref<ServiceStatus>({
+  state: "loading",
+  label: "Checking...",
+  detail: "Probing the grading cluster status",
+});
+
+const statusPollInterval = ref<ReturnType<typeof setInterval> | null>(null);
 
 const { data: submissions, pending: loadingSubmissions } = await useAsyncData(
   "dashboard-submissions",
@@ -19,6 +47,188 @@ const stats = computed(() => ({
   graded: submissions.value?.filter((s: any) => s.feedbackReady).length ?? 0,
   pending: submissions.value?.filter((s: any) => !s.feedbackReady).length ?? 0,
 }));
+
+const jobQueueApiBase = computed(() =>
+  String(config.public.jobQueueApiUrl ?? "")
+    .trim()
+    .replace(/\/$/, ""),
+);
+const jobQueueApiKey = computed(() =>
+  String(config.public.jobQueueApiKey ?? "").trim(),
+);
+const queueProxyUrl = computed(
+  () =>
+    String(config.public.apiBase ?? "")
+      .trim()
+      .replace(/\/$/, "") + "/api/administration/execution/queue/status",
+);
+
+const casStatus = computed<ServiceStatus>(() => {
+  const apiHost = new URL(config.public.apiBase).hostname;
+  const isLocalApi = ["localhost", "127.0.0.1", "0.0.0.0"].includes(apiHost);
+
+  if (isLocalApi) {
+    return {
+      state: "cluster-only",
+      label: "Cluster only",
+      detail: "CAS login only works against the Discovery cluster.",
+    };
+  }
+
+  return {
+    state: "online",
+    label: "Online",
+    detail: "CAS login should be available from this deployment.",
+  };
+});
+
+const systemStatuses = computed(() => [
+  {
+    title: "API",
+    status: apiStatus.value,
+  },
+  {
+    title: "Grading Cluster",
+    status: queueStatus.value,
+  },
+  {
+    title: "CAS Auth",
+    status: casStatus.value,
+  },
+]);
+
+function statusTone(state: ServiceStatusState) {
+  if (state === "online") {
+    return {
+      dot: "bg-green-500",
+      label: "text-green-600 dark:text-green-400",
+    };
+  }
+
+  if (state === "restricted") {
+    return {
+      dot: "bg-sky-500",
+      label: "text-sky-600 dark:text-sky-400",
+    };
+  }
+
+  if (state === "cluster-only") {
+    return {
+      dot: "bg-amber-500",
+      label: "text-amber-600 dark:text-amber-400",
+    };
+  }
+
+  if (state === "loading") {
+    return {
+      dot: "bg-gray-400 animate-pulse",
+      label: "text-gray-500",
+    };
+  }
+
+  return {
+    dot: "bg-red-500",
+    label: "text-red-600 dark:text-red-400",
+  };
+}
+
+function setServiceStatus(
+  target: Ref<ServiceStatus>,
+  state: ServiceStatusState,
+  label: string,
+  detail: string,
+) {
+  target.value = { state, label, detail };
+}
+
+async function refreshSystemStatuses() {
+  await nextTick();
+
+  try {
+    const response = await fetch(`${config.public.apiBase}/`, {
+      cache: "no-store",
+    });
+    if (response.ok) {
+      setServiceStatus(
+        apiStatus,
+        "online",
+        "Online",
+        "Backend root endpoint responded successfully.",
+      );
+    } else {
+      setServiceStatus(
+        apiStatus,
+        "offline",
+        "Offline",
+        `Backend root returned ${response.status}.`,
+      );
+    }
+  } catch {
+    setServiceStatus(
+      apiStatus,
+      "offline",
+      "Offline",
+      "Backend root could not be reached.",
+    );
+  }
+
+  try {
+    const response = await fetch(queueProxyUrl.value, {
+      cache: "no-store",
+      headers: authStore.token
+        ? { Authorization: `Bearer ${authStore.token}` }
+        : {},
+    });
+
+    if (response.ok) {
+      setServiceStatus(
+        queueStatus,
+        "online",
+        "Online",
+        "Grading cluster status received successfully.",
+      );
+      return;
+    }
+
+    if (response.status === 403) {
+      setServiceStatus(
+        queueStatus,
+        "restricted",
+        "Restricted",
+        "Queue status is available, but this account cannot view it.",
+      );
+      return;
+    }
+
+    setServiceStatus(
+      queueStatus,
+      "offline",
+      "Offline",
+      `Grading cluster returned ${response.status}.`,
+    );
+  } catch {
+    setServiceStatus(
+      queueStatus,
+      "offline",
+      "Offline",
+      "Grading cluster could not be reached.",
+    );
+  }
+}
+
+onMounted(() => {
+  void refreshSystemStatuses();
+  statusPollInterval.value = setInterval(() => {
+    void refreshSystemStatuses();
+  }, 60000);
+});
+
+onUnmounted(() => {
+  if (statusPollInterval.value) {
+    clearInterval(statusPollInterval.value);
+    statusPollInterval.value = null;
+  }
+});
 
 function timeAgo(dateStr: string): string {
   const date = new Date(dateStr);
@@ -218,35 +428,31 @@ function timeAgo(dateStr: string): string {
             System Status
           </h2>
           <div class="space-y-3">
-            <div class="flex items-center justify-between text-sm">
-              <span class="text-gray-600 dark:text-gray-400">API</span>
-              <div class="flex items-center gap-1.5">
-                <div class="w-1.5 h-1.5 rounded-full bg-green-500" />
-                <span
-                  class="text-green-600 dark:text-green-400 font-mono text-xs"
-                  >Online</span
-                >
+            <div
+              v-for="service in systemStatuses"
+              :key="service.title"
+              class="rounded-lg border border-gray-100 dark:border-gray-800 px-3 py-2"
+            >
+              <div class="flex items-center justify-between gap-3 text-sm">
+                <span class="text-gray-600 dark:text-gray-400">{{
+                  service.title
+                }}</span>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <div
+                    class="w-1.5 h-1.5 rounded-full"
+                    :class="statusTone(service.status.state).dot"
+                  />
+                  <span
+                    class="font-mono text-xs"
+                    :class="statusTone(service.status.state).label"
+                  >
+                    {{ service.status.label }}
+                  </span>
+                </div>
               </div>
-            </div>
-            <div class="flex items-center justify-between text-sm">
-              <span class="text-gray-600 dark:text-gray-400">Job Queue</span>
-              <div class="flex items-center gap-1.5">
-                <div class="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                <span
-                  class="text-amber-600 dark:text-amber-400 font-mono text-xs"
-                  >Connecting</span
-                >
-              </div>
-            </div>
-            <div class="flex items-center justify-between text-sm">
-              <span class="text-gray-600 dark:text-gray-400">CAS Auth</span>
-              <div class="flex items-center gap-1.5">
-                <div class="w-1.5 h-1.5 rounded-full bg-green-500" />
-                <span
-                  class="text-green-600 dark:text-green-400 font-mono text-xs"
-                  >Online</span
-                >
-              </div>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {{ service.status.detail }}
+              </p>
             </div>
           </div>
         </div>

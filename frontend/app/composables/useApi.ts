@@ -1,4 +1,5 @@
 import { useAuthStore } from "~/stores/auth";
+import { nextTick } from "vue";
 
 /**
  * useApi composable
@@ -22,16 +23,21 @@ export function useApi() {
     if (response.status === 403) {
       toast.add({
         title: "Access Denied",
-        description: response._data?.message || "You do not have permission to perform this action.",
-        color: "red"
+        description:
+          response._data?.message ||
+          "You do not have permission to perform this action.",
+        color: "error",
       });
       // Re-fetch user to sync roles in case they changed
-      await authStore.me();
+      await authStore.fetchUser();
     }
   };
 
-  function getHeaders(body?: unknown): Record<string, string> {
+  async function getHeaders(body?: unknown): Promise<Record<string, string>> {
     const headers: Record<string, string> = {};
+    // Give persisted Pinia state one tick to hydrate before reading the token.
+    await nextTick();
+
     // Do not set Content-Type for FormData; the browser needs to set it with the boundary
     if (!(body instanceof FormData)) {
       headers["Content-Type"] = "application/json";
@@ -48,7 +54,7 @@ export function useApi() {
   ): Promise<T> {
     return $fetch<T>(`${baseURL}/api${path}`, {
       method: "GET",
-      headers: getHeaders(),
+      headers: await getHeaders(),
       params,
       onResponseError: handleResponseError,
     });
@@ -60,7 +66,7 @@ export function useApi() {
   ): Promise<T> {
     return $fetch<T>(`${baseURL}/api${path}`, {
       method: "POST",
-      headers: getHeaders(body),
+      headers: await getHeaders(body),
       body: body as any,
       onResponseError: handleResponseError,
     });
@@ -72,7 +78,7 @@ export function useApi() {
   ): Promise<T> {
     return $fetch<T>(`${baseURL}/api${path}`, {
       method: "PATCH",
-      headers: getHeaders(body),
+      headers: await getHeaders(body),
       body: body as any,
       onResponseError: handleResponseError,
     });
@@ -81,7 +87,7 @@ export function useApi() {
   async function del<T>(path: string): Promise<T> {
     return $fetch<T>(`${baseURL}/api${path}`, {
       method: "DELETE",
-      headers: getHeaders(),
+      headers: await getHeaders(),
       onResponseError: handleResponseError,
     });
   }

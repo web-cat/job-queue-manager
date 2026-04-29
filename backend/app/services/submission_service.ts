@@ -81,7 +81,9 @@ export default class SubmissionService {
 
       // 5. Gather assignment data for queueing
       const assignment = await Assignment.findOrFail(data.workoutId, { client: trx })
-      imageTag = assignment.dockerImageTag || 'vt-cs/default-grader:latest'
+      imageTag =
+        assignment.dockerImageTag ||
+        'ghcr.io/sytraore/job-queue-scheduler/test-grader-java8-zip:latest'
 
       // Commit before network call so the external system/jobQueueService can find the submission
       await trx.commit()
@@ -151,6 +153,27 @@ export default class SubmissionService {
           completedAt: completedAt ? DateTime.fromISO(completedAt) : null,
         })
         .save()
+
+      const assignment = await Assignment.findOrFail(submission.workoutId)
+      const runtimeSeconds = typeof result.runtime_ms === 'number' ? result.runtime_ms / 1000 : null
+
+      if (runtimeSeconds !== null) {
+        const currentEstimateSeconds = assignment.estimatedRuntimeSeconds ?? runtimeSeconds
+        const updatedEstimateSeconds = Math.max(
+          1,
+          Math.round((currentEstimateSeconds + runtimeSeconds) / 2)
+        )
+
+        assignment.estimatedRuntimeSeconds = updatedEstimateSeconds
+        await assignment.save()
+
+        if (assignment.dockerImageTag) {
+          await this.jobQueueService.syncRuntimeEstimateForImageTag(
+            assignment.dockerImageTag,
+            updatedEstimateSeconds
+          )
+        }
+      }
 
       if (result.has_payload && result.payload_url) {
         const fileBuffer = await this.jobQueueService.downloadPayload(result.payload_url)
