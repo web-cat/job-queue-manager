@@ -21,6 +21,35 @@ const { data: result } = await useAsyncData(
   () => get<any>(`/submissions/${route.params.id}/result`),
 );
 
+// Track all submissions for this assignment
+const allAssignmentSubmissions = ref<any[]>([]);
+
+// Fetch all submissions for the assignment once submission is loaded
+const submissionNumber = computed(() => {
+  if (!submission.value || !allAssignmentSubmissions.value.length) return null;
+  const sorted = [...allAssignmentSubmissions.value].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  );
+  const index = sorted.findIndex((s) => s.id === submission.value?.id);
+  return index >= 0 ? index + 1 : null;
+});
+
+watch(
+  () => submission.value?.workoutId,
+  async (workoutId) => {
+    if (!workoutId) return;
+    try {
+      const res = await get<{ data: any[] }>(
+        `/submissions?workoutId=${workoutId}`,
+      );
+      allAssignmentSubmissions.value = res.data ?? [];
+    } catch (error) {
+      console.error("Failed to fetch assignment submissions:", error);
+    }
+  },
+  { immediate: true },
+);
+
 // Poll for result if not graded yet
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -170,7 +199,10 @@ async function downloadFile() {
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-3">
             <h1 class="text-xl font-bold text-gray-900 dark:text-white">
-              Submission #{{ submission.id }}
+              <span v-if="submissionNumber">
+                Submission #{{ submissionNumber }}
+              </span>
+              <USkeleton v-else class="h-8 w-32" />
             </h1>
             <UBadge
               :label="submission.feedbackReady ? 'Graded' : 'Pending'"
@@ -193,7 +225,7 @@ async function downloadFile() {
           <p v-else class="text-xs text-gray-400 italic">No file available</p>
         </div>
 
-        <div class="grid grid-cols-2 gap-4 text-sm">
+        <div class="grid grid-cols-3 gap-4 text-sm">
           <div>
             <div
               class="text-xs font-mono text-gray-500 uppercase tracking-wider mb-1"
@@ -212,6 +244,21 @@ async function downloadFile() {
             </div>
             <div class="text-gray-900 dark:text-white">
               {{ submission.assignmentOffering.assignment.name }}
+            </div>
+          </div>
+          <div>
+            <div
+              class="text-xs font-mono text-gray-500 uppercase tracking-wider mb-1"
+            >
+              Submission ID
+            </div>
+            <div>
+              <UBadge
+                :label="`${submission.id}`"
+                variant="subtle"
+                size="sm"
+                color="neutral"
+              />
             </div>
           </div>
         </div>

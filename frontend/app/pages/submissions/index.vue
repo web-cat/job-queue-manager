@@ -14,6 +14,40 @@ const {
 
 const submissions = computed(() => response.value?.data ?? []);
 
+// Number submissions per assignment
+const submissionsWithNumbers = computed(() => {
+  const grouped: Record<number, any[]> = {};
+
+  // Group submissions by assignment ID
+  submissions.value.forEach((sub) => {
+    const assignmentId = sub.assignmentOffering?.assignment?.id ?? 0;
+    if (!grouped[assignmentId]) {
+      grouped[assignmentId] = [];
+    }
+    grouped[assignmentId].push(sub);
+  });
+
+  // Sort each group by creation time and number them
+  const withNumbers: any[] = [];
+  Object.entries(grouped).forEach(([, subs]) => {
+    const sorted = subs.sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
+    sorted.forEach((sub, index) => {
+      withNumbers.push({
+        ...sub,
+        submissionNumber: index + 1,
+      });
+    });
+  });
+
+  // Sort back by creation time for display
+  return withNumbers.sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+});
+
 watch(page, () => refresh());
 
 function getCorrectnessScore(sub: any): number | null {
@@ -66,7 +100,7 @@ function timeAgo(dateStr: string): string {
     </div>
 
     <!-- Empty -->
-    <div v-else-if="!submissions.length" class="text-center py-16">
+    <div v-else-if="!submissionsWithNumbers.length" class="text-center py-16">
       <UIcon
         name="i-heroicons-code-bracket"
         class="w-12 h-12 text-gray-300 dark:text-gray-700 mx-auto mb-4"
@@ -87,7 +121,7 @@ function timeAgo(dateStr: string): string {
     >
       <div class="divide-y divide-gray-100 dark:divide-gray-800">
         <NuxtLink
-          v-for="sub in submissions"
+          v-for="sub in submissionsWithNumbers"
           :key="sub.id"
           :to="`/submissions/${sub.id}`"
           class="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group"
@@ -106,7 +140,7 @@ function timeAgo(dateStr: string): string {
               <span
                 class="font-medium text-gray-900 dark:text-white group-hover:text-[#861F41] transition-colors"
               >
-                Submission #{{ sub.id }}
+                Submission #{{ sub.submissionNumber }}
               </span>
               <UBadge
                 :label="statusLabel(sub)"

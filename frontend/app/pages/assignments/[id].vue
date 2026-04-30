@@ -14,40 +14,59 @@ const offering = computed(() => {
   const offerings = assignment.value?.assignmentOfferings;
   if (!offerings?.length) return null;
   const sectionId = Number(route.query.sectionId);
-  return offerings.find((o: any) => o.courseOfferingId === sectionId) ?? offerings[0];
+  return (
+    offerings.find((o: any) => o.courseOfferingId === sectionId) ?? offerings[0]
+  );
 });
 
 function formatDueDate(iso: string | null | undefined): string | null {
   if (!iso) return null;
   const d = new Date(iso);
-  return d.toLocaleString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-    hour: 'numeric', minute: '2-digit', hour12: true,
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
   });
 }
 
-function dueUrgency(iso: string | null | undefined): 'past' | 'soon' | 'ok' | null {
+function dueUrgency(
+  iso: string | null | undefined,
+): "past" | "soon" | "ok" | null {
   if (!iso) return null;
   const diff = new Date(iso).getTime() - Date.now();
-  if (diff < 0) return 'past';
-  if (diff < 48 * 60 * 60 * 1000) return 'soon';
-  return 'ok';
+  if (diff < 0) return "past";
+  if (diff < 48 * 60 * 60 * 1000) return "soon";
+  return "ok";
 }
 
 const {
   data: submissions,
   pending: pendingSubmissions,
   refresh: refreshSubmissions,
-} = await useAsyncData(
-  `assignment-${route.params.id}-submissions`,
-  () => get<{ data: any[] }>(`/submissions?workoutId=${route.params.id}`)
+} = await useAsyncData(`assignment-${route.params.id}-submissions`, () =>
+  get<{ data: any[] }>(`/submissions?workoutId=${route.params.id}`)
     .then((r) => r.data)
-    .catch(() => [])
+    .catch(() => []),
 );
 
 const submitting = ref(false);
 const submitted = ref(false);
 const submissionId = ref<number | null>(null);
+
+// Number submissions per assignment (ordered by creation time)
+const submissionsWithNumbers = computed(() => {
+  if (!submissions.value) return [];
+  const sorted = [...submissions.value].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  );
+  return sorted.map((sub, index) => ({
+    ...sub,
+    submissionNumber: index + 1,
+  }));
+});
 
 const fileInput = ref<HTMLInputElement | null>(null);
 const selectedFile = ref<File | null>(null);
@@ -210,19 +229,26 @@ async function handleSubmit() {
               <span>ID: {{ assignment.id }}</span>
               <span>
                 Max attempts:
-                {{ offering?.attemptLimit ?? assignment.submissionPolicy?.maxSubmits ?? "∞" }}
+                {{
+                  offering?.attemptLimit ??
+                  assignment.submissionPolicy?.maxSubmits ??
+                  "∞"
+                }}
               </span>
               <span
                 v-if="offering?.dueAt"
                 class="flex items-center gap-1.5 font-sans text-xs font-medium"
                 :class="{
-                  'text-red-500 dark:text-red-400': dueUrgency(offering.dueAt) === 'past',
-                  'text-amber-500 dark:text-amber-400': dueUrgency(offering.dueAt) === 'soon',
-                  'text-gray-400 dark:text-gray-500': dueUrgency(offering.dueAt) === 'ok',
+                  'text-red-500 dark:text-red-400':
+                    dueUrgency(offering.dueAt) === 'past',
+                  'text-amber-500 dark:text-amber-400':
+                    dueUrgency(offering.dueAt) === 'soon',
+                  'text-gray-400 dark:text-gray-500':
+                    dueUrgency(offering.dueAt) === 'ok',
                 }"
               >
                 <UIcon name="i-heroicons-clock" class="w-3.5 h-3.5" />
-                {{ dueUrgency(offering.dueAt) === 'past' ? 'Was due' : 'Due' }}
+                {{ dueUrgency(offering.dueAt) === "past" ? "Was due" : "Due" }}
                 {{ formatDueDate(offering.dueAt) }}
               </span>
             </div>
@@ -389,7 +415,7 @@ async function handleSubmit() {
 
             <div v-else class="space-y-3">
               <NuxtLink
-                v-for="sub in submissions"
+                v-for="sub in submissionsWithNumbers"
                 :key="sub.id"
                 :to="{
                   path: `/submissions/${sub.id}`,
@@ -404,7 +430,7 @@ async function handleSubmit() {
                   <span
                     class="text-sm font-medium text-gray-900 dark:text-white group-hover:text-[#861F41] transition-colors"
                   >
-                    Submission #{{ sub.id }}
+                    Submission #{{ sub.submissionNumber }}
                   </span>
                   <UBadge
                     :label="sub.feedbackReady ? 'Graded' : 'Pending'"
