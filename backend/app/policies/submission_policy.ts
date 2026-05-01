@@ -1,7 +1,6 @@
 import User from '#models/user'
 import Submission from '#models/submission'
 import AssignmentOffering from '#models/assignment_offering'
-import CourseEnrollment from '#models/course_enrollment'
 import { BasePolicy } from '@adonisjs/bouncer'
 
 export default class SubmissionPolicy extends BasePolicy {
@@ -9,11 +8,16 @@ export default class SubmissionPolicy extends BasePolicy {
     if (user.globalRoleId === 1) return true
 
     if (assignmentOfferingId) {
-      const enrollment = await CourseEnrollment.query()
-        .where('user_id', user.id)
-        .where('course_offering_id', assignmentOfferingId)
+      const offering = await AssignmentOffering.query()
+        .where('id', assignmentOfferingId)
+        .preload('section', (q) => {
+          q.preload('enrollments', (eq) => {
+            eq.where('user_id', user.id)
+          })
+        })
         .first()
-      return !!enrollment
+
+      return !!offering?.section?.enrollments?.length
     }
 
     const offering = await AssignmentOffering.query()
@@ -33,11 +37,16 @@ export default class SubmissionPolicy extends BasePolicy {
     if (submission.userId === user.id) return true
 
     if (submission.assignmentOfferingId) {
-      const enrollment = await CourseEnrollment.query()
-        .where('user_id', user.id)
-        .where('course_offering_id', submission.assignmentOfferingId)
+      const offering = await AssignmentOffering.query()
+        .where('id', submission.assignmentOfferingId)
+        .preload('section', (q) => {
+          q.preload('enrollments', (eq) => {
+            eq.where('user_id', user.id)
+          })
+        })
         .first()
 
+      const enrollment = offering?.section?.enrollments?.[0]
       return enrollment?.courseRoleId === 1 || enrollment?.courseRoleId === 2
     }
 
