@@ -71,11 +71,12 @@ const submissionsWithNumbers = computed(() => {
 const fileInput = ref<HTMLInputElement | null>(null);
 const selectedFile = ref<File | null>(null);
 
-function isValidZip(file: File): boolean {
+function isValidZip(file: File | undefined): file is File {
   return (
-    file.name.toLowerCase().endsWith(".zip") ||
-    file.type === "application/zip" ||
-    file.type === "application/x-zip-compressed"
+    !!file &&
+    (file.name.toLowerCase().endsWith(".zip") ||
+      file.type === "application/zip" ||
+      file.type === "application/x-zip-compressed")
   );
 }
 
@@ -83,6 +84,7 @@ function handleFileChange(event: Event) {
   const target = event.target as HTMLInputElement;
   if (target.files && target.files.length > 0) {
     const file = target.files[0];
+    if (!file) return;
     if (isValidZip(file)) {
       selectedFile.value = file;
     } else {
@@ -99,6 +101,7 @@ function handleFileChange(event: Event) {
 function handleDrop(event: DragEvent) {
   if (event.dataTransfer?.files && event.dataTransfer.files.length > 0) {
     const file = event.dataTransfer.files[0];
+    if (!file) return;
     if (isValidZip(file)) {
       selectedFile.value = file;
     } else {
@@ -144,6 +147,9 @@ async function handleSubmit() {
     const formData = new FormData();
     if (assignment.value?.id) {
       formData.append("workoutId", assignment.value.id.toString());
+    }
+    if (offering.value?.id) {
+      formData.append("assignmentOfferingId", offering.value.id.toString());
     }
     formData.append("isSubmissionForGrading", "true");
     formData.append("submission_zip", selectedFile.value);
@@ -357,7 +363,7 @@ async function handleSubmit() {
               </div>
               <UButton
                 variant="ghost"
-                color="gray"
+                color="neutral"
                 icon="i-heroicons-x-mark"
                 size="sm"
                 @click="clearFile"
@@ -426,18 +432,22 @@ async function handleSubmit() {
                 }"
                 class="block p-3 rounded-lg border border-gray-100 dark:border-gray-800 hover:border-[#861F41]/50 bg-gray-50/50 dark:bg-gray-800/50 transition-colors group"
               >
-                <div class="flex items-center justify-between mb-1">
+                <div
+                  class="flex items-center justify-between gap-2 mb-1 flex-wrap"
+                >
                   <span
                     class="text-sm font-medium text-gray-900 dark:text-white group-hover:text-[#861F41] transition-colors"
                   >
                     Submission #{{ sub.submissionNumber }}
                   </span>
-                  <UBadge
-                    :label="sub.feedbackReady ? 'Graded' : 'Pending'"
-                    :color="sub.feedbackReady ? 'success' : 'amber'"
-                    variant="subtle"
-                    size="xs"
-                  />
+                  <div class="flex items-center gap-2 flex-wrap justify-end">
+                    <UBadge
+                      :label="sub.feedbackReady ? 'Graded' : 'Pending'"
+                      :color="sub.feedbackReady ? 'success' : 'warning'"
+                      variant="subtle"
+                      size="xs"
+                    />
+                  </div>
                 </div>
                 <div
                   class="text-xs text-gray-500 font-mono flex items-center justify-between mt-2"
