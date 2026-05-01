@@ -14,39 +14,64 @@ const {
 
 const submissions = computed(() => response.value?.data ?? []);
 
-// Number submissions per assignment
+// Number submissions per assignment (use server-side full lists per assignment)
+const submissionNumberMap = ref<Record<number, number>>({});
+const loadingSubmissionNumbers = ref(false);
+
 const submissionsWithNumbers = computed(() => {
-  const grouped: Record<number, any[]> = {};
-
-  // Group submissions by assignment ID
-  submissions.value.forEach((sub) => {
-    const assignmentId = sub.assignmentOffering?.assignment?.id ?? 0;
-    if (!grouped[assignmentId]) {
-      grouped[assignmentId] = [];
-    }
-    grouped[assignmentId].push(sub);
-  });
-
-  // Sort each group by creation time and number them
-  const withNumbers: any[] = [];
-  Object.entries(grouped).forEach(([, subs]) => {
-    const sorted = subs.sort(
-      (a, b) =>
-        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-    );
-    sorted.forEach((sub, index) => {
-      withNumbers.push({
-        ...sub,
-        submissionNumber: index + 1,
-      });
-    });
-  });
-
-  // Sort back by creation time for display
-  return withNumbers.sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  );
+  return (submissions.value ?? []).map((sub: any) => ({
+    ...sub,
+    submissionNumber: submissionNumberMap.value[sub.id] ?? null,
+  }));
 });
+
+async function loadSubmissionNumbers() {
+  loadingSubmissionNumbers.value = true;
+  submissionNumberMap.value = {};
+
+  const assignmentMap: Record<number, number[]> = {};
+  (submissions.value ?? []).forEach((sub: any) => {
+    const assignmentId =
+      sub.assignment?.id ??
+      sub.assignmentOffering?.assignment?.id ??
+      sub.workoutId ??
+      0;
+    if (!assignmentId) return;
+    if (!assignmentMap[assignmentId]) assignmentMap[assignmentId] = [];
+    assignmentMap[assignmentId].push(sub.id);
+  });
+
+  await Promise.all(
+    Object.keys(assignmentMap).map(async (aid) => {
+      const assignmentId = Number(aid);
+      try {
+        const res = await get<{ data: any[] }>(
+          `/submissions?workoutId=${assignmentId}`,
+        );
+        const all = res.data ?? [];
+        const sorted = all.sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        );
+        sorted.forEach((s: any, idx: number) => {
+          submissionNumberMap.value[s.id] = idx + 1;
+        });
+      } catch (e) {
+        // ignore per-assignment fetch errors
+      }
+    }),
+  );
+
+  loadingSubmissionNumbers.value = false;
+}
+
+watch(
+  submissions,
+  () => {
+    void loadSubmissionNumbers();
+  },
+  { immediate: true },
+);
 
 watch(page, () => refresh());
 
@@ -124,60 +149,74 @@ function timeAgo(dateStr: string): string {
           v-for="sub in submissionsWithNumbers"
           :key="sub.id"
           :to="`/submissions/${sub.id}`"
-          class="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group"
+          class="flex items-center justify-between gap-4 px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group"
         >
-          <!-- Status indicator -->
-          <div
-            class="w-2.5 h-2.5 rounded-full flex-shrink-0"
-            :class="
-              sub.feedbackReady ? 'bg-green-500' : 'bg-amber-500 animate-pulse'
-            "
-          />
-
-          <!-- Main info -->
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2">
-              <span
-                class="font-medium text-gray-900 dark:text-white group-hover:text-[#861F41] transition-colors"
-              >
-                Submission #{{ sub.submissionNumber }}
-              </span>
-              <UBadge
-                :label="statusLabel(sub)"
-                :color="statusColor(sub)"
-                variant="soft"
-                size="xs"
-              />
-            </div>
-            <div class="text-xs text-gray-500 font-mono mt-0.5">
-              {{ timeAgo(sub.createdAt) }}
-              <template v-if="sub.assignmentOffering?.assignment">
-                · {{ sub.assignmentOffering.assignment.name }}
-              </template>
-            </div>
-          </div>
-
-          <!-- Score if graded -->
-          <div
-            v-if="sub.feedbackReady && getCorrectnessScore(sub) != null"
-            class="text-right"
-          >
+          <!-- Left: Status indicator and submission info -->
+          <div class="flex items-center gap-4 flex-1 min-w-0">
             <div
-              class="text-lg font-bold font-mono"
+              class="w-2.5 h-2.5 rounded-full flex-shrink-0"
               :class="
-                getCorrectnessScore(sub)! >= 0.7
-                  ? 'text-green-600 dark:text-green-400'
-                  : 'text-red-600 dark:text-red-400'
+                sub.feedbackReady
+                  ? 'bg-green-500'
+                  : 'bg-amber-500 animate-pulse'
               "
-            >
-              {{ Math.round(getCorrectnessScore(sub)! * 100) }}%
+            />
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span
+                  v-if="
+                    !loadingSubmissionNumbers && sub.submissionNumber != null
+                  "
+                  class="font-medium text-gray-900 dark:text-white group-hover:text-[#861F41] transition-colors"
+                >
+                  Submission #{{ sub.submissionNumber }}
+                </span>
+                <USkeleton v-else class="h-4 w-20" />
+                <UBadge
+                  :label="statusLabel(sub)"
+                  :color="statusColor(sub)"
+                  variant="soft"
+                  size="xs"
+                />
+              </div>
+              <div class="text-xs text-gray-500 font-mono mt-0.5">
+                {{ timeAgo(sub.createdAt) }}
+              </div>
             </div>
           </div>
 
-          <UIcon
-            name="i-heroicons-chevron-right"
-            class="w-4 h-4 text-gray-400 group-hover:text-gray-600 flex-shrink-0"
-          />
+          <!-- Right: Assignment/course names, score, and chevron -->
+          <div class="flex items-center gap-3 flex-shrink-0">
+            <div class="text-right">
+              <div
+                v-if="sub.assignmentOffering?.section?.course?.name"
+                class="text-sm font-semibold text-gray-900 dark:text-white"
+              >
+                {{ sub.assignmentOffering.section.course.name }}
+              </div>
+              <div
+                v-if="sub.assignment?.name"
+                class="text-xs text-gray-600 dark:text-gray-400"
+              >
+                {{ sub.assignment.name }}
+              </div>
+              <div
+                v-if="sub.feedbackReady && getCorrectnessScore(sub) != null"
+                class="text-sm font-bold font-mono mt-1"
+                :class="
+                  getCorrectnessScore(sub)! >= 0.7
+                    ? 'text-green-600 dark:text-green-400'
+                    : 'text-red-600 dark:text-red-400'
+                "
+              >
+                {{ Math.round(getCorrectnessScore(sub)! * 100) }}%
+              </div>
+            </div>
+            <UIcon
+              name="i-heroicons-chevron-right"
+              class="w-4 h-4 text-gray-400 group-hover:text-gray-600"
+            />
+          </div>
         </NuxtLink>
       </div>
     </div>

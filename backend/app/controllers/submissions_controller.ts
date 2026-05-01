@@ -94,7 +94,10 @@ export default class SubmissionsController {
 
     // Query submissions scoped to the user — admins see all, everyone else sees only their own
     const query = Submission.query()
-      .preload('assignmentOffering', (q) => q.preload('assignment'))
+      .preload('assignment')
+      .preload('assignmentOffering', (q) =>
+        q.preload('assignment').preload('section', (s) => s.preload('course'))
+      )
       .preload('submissionResult')
       .orderBy('created_at', 'desc')
 
@@ -122,7 +125,10 @@ export default class SubmissionsController {
   async show({ bouncer, params, response }: HttpContext) {
     const submission = await Submission.query()
       .where('id', params.id)
-      .preload('assignmentOffering', (q) => q.preload('assignment'))
+      .preload('assignment')
+      .preload('assignmentOffering', (q) =>
+        q.preload('assignment').preload('section', (s) => s.preload('course'))
+      )
       .preload('submissionResult')
       .firstOrFail()
 

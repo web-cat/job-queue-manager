@@ -42,11 +42,118 @@ const { data: submissions, pending: loadingSubmissions } = await useAsyncData(
       .catch(() => []),
 );
 
+// Overall counts (total, graded, pending) for user's submissions
+const overallTotal = ref<number | null>(null);
+const overallGraded = ref<number | null>(null);
+const overallPending = ref<number | null>(null);
+const loadingOverallCounts = ref(true);
+
+async function loadOverallCounts() {
+  loadingOverallCounts.value = true;
+  try {
+    const metaResp = await get<{ data: any[]; meta?: any }>(
+      "/submissions?limit=1",
+    );
+    const total = metaResp.meta?.total ?? metaResp.data?.length ?? 0;
+    overallTotal.value = total;
+
+    if (total > 0) {
+      const allResp = await get<{ data: any[] }>(`/submissions?limit=${total}`);
+      const all = allResp.data ?? [];
+      overallGraded.value = all.filter((s: any) => s.feedbackReady).length;
+      overallPending.value = all.filter((s: any) => !s.feedbackReady).length;
+    } else {
+      overallGraded.value = 0;
+      overallPending.value = 0;
+    }
+  } catch (e) {
+    // fallback to nulls (UI will use short list counts)
+    overallTotal.value = null;
+    overallGraded.value = null;
+    overallPending.value = null;
+  } finally {
+    loadingOverallCounts.value = false;
+  }
+}
+
+// load overall counts once
+void loadOverallCounts();
+
 const stats = computed(() => ({
-  total: submissions.value?.length ?? 0,
-  graded: submissions.value?.filter((s: any) => s.feedbackReady).length ?? 0,
-  pending: submissions.value?.filter((s: any) => !s.feedbackReady).length ?? 0,
+  total: overallTotal.value ?? submissions.value?.length ?? 0,
+  graded:
+    overallGraded.value ??
+    submissions.value?.filter((s: any) => s.feedbackReady).length ??
+    0,
+  pending:
+    overallPending.value ??
+    submissions.value?.filter((s: any) => !s.feedbackReady).length ??
+    0,
 }));
+
+// Number submissions per assignment
+const submissionsWithNumbers = computed(() => {
+  // Map submissions to include submissionNumber if available from map
+  return (submissions.value ?? []).map((sub: any) => ({
+    ...sub,
+    submissionNumber: submissionNumberMap.value[sub.id] ?? null,
+  })) as any[];
+});
+
+// Reactive map of submissionId -> submissionNumber
+const submissionNumberMap = ref<Record<number, number>>({});
+const loadingSubmissionNumbers = ref(false);
+
+async function loadSubmissionNumbers() {
+  loadingSubmissionNumbers.value = true;
+  submissionNumberMap.value = {};
+  const assignmentMap: Record<number, number[]> = {};
+
+  // collect assignment ids for the current submissions
+  (submissions.value ?? []).forEach((sub: any) => {
+    const assignmentId =
+      sub.assignment?.id ??
+      sub.assignmentOffering?.assignment?.id ??
+      sub.workoutId ??
+      0;
+    if (!assignmentId) return;
+    if (!assignmentMap[assignmentId]) assignmentMap[assignmentId] = [];
+    assignmentMap[assignmentId].push(sub.id);
+  });
+
+  // For each assignment, fetch all submissions and compute positions
+  await Promise.all(
+    Object.keys(assignmentMap).map(async (aid) => {
+      const assignmentId = Number(aid);
+      try {
+        const res = await get<{ data: any[] }>(
+          `/submissions?workoutId=${assignmentId}`,
+        );
+        const all = res.data ?? [];
+        const sorted = all.sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        );
+        sorted.forEach((s: any, idx: number) => {
+          submissionNumberMap.value[s.id] = idx + 1;
+        });
+      } catch (e) {
+        // ignore failures per-assignment
+      }
+    }),
+  );
+
+  loadingSubmissionNumbers.value = false;
+}
+
+// Reload numbers when submissions change
+watch(
+  submissions,
+  () => {
+    void loadSubmissionNumbers();
+  },
+  { immediate: true },
+);
 
 const jobQueueApiBase = computed(() =>
   String(config.public.jobQueueApiUrl ?? "")
@@ -275,7 +382,11 @@ function timeAgo(dateStr: string): string {
         >
           Total Submissions
         </div>
-        <div class="text-3xl font-bold text-gray-900 dark:text-white font-mono">
+        <USkeleton v-if="loadingOverallCounts" class="h-9 w-16" />
+        <div
+          v-else
+          class="text-3xl font-bold text-gray-900 dark:text-white font-mono"
+        >
           {{ stats.total }}
         </div>
       </div>
@@ -287,7 +398,9 @@ function timeAgo(dateStr: string): string {
         >
           Graded
         </div>
+        <USkeleton v-if="loadingOverallCounts" class="h-9 w-16" />
         <div
+          v-else
           class="text-3xl font-bold text-green-600 dark:text-green-400 font-mono"
         >
           {{ stats.graded }}
@@ -301,7 +414,9 @@ function timeAgo(dateStr: string): string {
         >
           Pending
         </div>
+        <USkeleton v-if="loadingOverallCounts" class="h-9 w-16" />
         <div
+          v-else
           class="text-3xl font-bold text-amber-600 dark:text-amber-400 font-mono"
         >
           {{ stats.pending }}
@@ -343,12 +458,12 @@ function timeAgo(dateStr: string): string {
 
         <div v-else class="divide-y divide-gray-100 dark:divide-gray-800">
           <NuxtLink
-            v-for="sub in submissions"
+            v-for="sub in submissionsWithNumbers"
             :key="sub.id"
             :to="`/submissions/${sub.id}`"
             class="flex items-center justify-between px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group"
           >
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-3 flex-1 min-w-0">
               <div
                 class="w-2 h-2 rounded-full flex-shrink-0"
                 :class="
@@ -357,24 +472,50 @@ function timeAgo(dateStr: string): string {
                     : 'bg-amber-500 animate-pulse'
                 "
               />
-              <div>
-                <div
-                  class="text-sm font-medium text-gray-900 dark:text-white group-hover:text-[#861F41] transition-colors"
-                >
-                  Submission #{{ sub.id }}
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span
+                    v-if="
+                      !loadingSubmissionNumbers && sub.submissionNumber != null
+                    "
+                    class="text-sm font-medium text-gray-900 dark:text-white group-hover:text-[#861F41] transition-colors"
+                  >
+                    Submission #{{ sub.submissionNumber }}
+                  </span>
+                  <USkeleton v-else class="h-4 w-20" />
+                  <UBadge
+                    :label="sub.feedbackReady ? 'Graded' : 'Pending'"
+                    :color="sub.feedbackReady ? 'success' : 'warning'"
+                    variant="soft"
+                    size="xs"
+                  />
                 </div>
                 <div class="text-xs text-gray-500 font-mono">
                   {{ timeAgo(sub.createdAt) }}
                 </div>
               </div>
             </div>
-            <div class="flex items-center gap-2">
-              <UBadge
-                :label="sub.feedbackReady ? 'Graded' : 'Pending'"
-                :color="sub.feedbackReady ? 'success' : 'warning'"
-                variant="soft"
-                size="xs"
-              />
+            <div class="flex items-center gap-3 flex-shrink-0">
+              <div class="text-right">
+                <template v-if="loadingSubmissionNumbers">
+                  <USkeleton class="h-4 w-28 mb-1" />
+                  <USkeleton class="h-3 w-20" />
+                </template>
+                <template v-else>
+                  <div
+                    v-if="sub.assignmentOffering?.section?.course?.name"
+                    class="text-sm font-semibold text-gray-900 dark:text-white"
+                  >
+                    {{ sub.assignmentOffering.section.course.name }}
+                  </div>
+                  <div
+                    v-if="sub.assignment?.name"
+                    class="text-xs text-gray-600 dark:text-gray-400"
+                  >
+                    {{ sub.assignment.name }}
+                  </div>
+                </template>
+              </div>
               <UIcon
                 name="i-heroicons-chevron-right"
                 class="w-4 h-4 text-gray-400 group-hover:text-gray-600 transition-colors"

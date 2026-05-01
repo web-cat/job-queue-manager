@@ -252,13 +252,8 @@ async function downloadFile() {
             >
               Submission ID
             </div>
-            <div>
-              <UBadge
-                :label="`${submission.id}`"
-                variant="subtle"
-                size="sm"
-                color="neutral"
-              />
+            <div class="text-gray-900 dark:text-white">
+              {{ submission.id }}
             </div>
           </div>
         </div>
