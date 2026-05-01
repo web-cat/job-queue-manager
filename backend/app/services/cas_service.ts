@@ -68,8 +68,12 @@ export default class CasService {
    * Build the CAS logout redirect URL.
    * Sending the user here ends their CAS session university-wide.
    */
-  getLogoutUrl(): string {
-    const params = new URLSearchParams({ service: this.serviceUrl })
+  getLogoutUrl(redirectUrl?: string): string {
+    const params = new URLSearchParams({
+      service:
+        redirectUrl ??
+        `${env.get('FRONTEND_URL', 'https://webcatmaxxers.discovery.cs.vt.edu')}/login`,
+    })
     return `${this.casBaseUrl}/logout?${params.toString()}`
   }
 

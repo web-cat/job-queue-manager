@@ -175,7 +175,8 @@ export default class CasController {
     }
 
     // Redirect to CAS logout — ends the university-wide SSO session
-    const logoutUrl = this.casService.getLogoutUrl()
+    const frontendUrl = env.get('FRONTEND_URL', 'https://webcatmaxxers.discovery.cs.vt.edu')
+    const logoutUrl = this.casService.getLogoutUrl(`${frontendUrl}/login`)
     return response.redirect(logoutUrl)
   }
 }
