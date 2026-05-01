@@ -108,6 +108,8 @@ jobs:
     needs:
       - build-backend
       - build-frontend
+    env:
+      KUBECONFIG: ${{ github.workspace }}/.kube/config
     steps:
       - name: setup kubectl
         uses: azure/setup-kubectl@v4
@@ -116,9 +118,22 @@ jobs:
         env:
           KUBECONFIG_B64: ${{ secrets.DISCOVERY_KUBECONFIG_B64 }}
         run: |
-          mkdir -p "$HOME/.kube"
-          echo "$KUBECONFIG_B64" | base64 --decode > "$HOME/.kube/config"
-          chmod 600 "$HOME/.kube/config"
+          if [[ -z "$KUBECONFIG_B64" ]]; then
+            echo "DISCOVERY_KUBECONFIG_B64 is empty or not set"
+            exit 1
+          fi
+          mkdir -p "$(dirname "$KUBECONFIG")"
+          echo "$KUBECONFIG_B64" | base64 --decode > "$KUBECONFIG"
+          chmod 600 "$KUBECONFIG"
+          if [[ ! -s "$KUBECONFIG" ]]; then
+            echo "Decoded kubeconfig is empty"
+            exit 1
+          fi
+
+      - name: verify kubernetes access
+        run: |
+          kubectl config current-context
+          kubectl cluster-info
 
       - name: rollout backend and frontend deployments
         run: |
