@@ -12,8 +12,10 @@ export default defineNuxtConfig({
   modules: ["@pinia/nuxt", "@nuxt/ui", "@nuxt/icon"],
 
   icon: {
-    provider: "server",
-    collections: ["heroicons", "lucide"],
+    localApiEndpoint: '/_nuxt_icon',
+    serverBundle: {
+      collections: ["heroicons", "lucide"],
+    }
   },
 
   vite: {

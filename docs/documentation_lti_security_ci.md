@@ -1,6 +1,6 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# LTI 1.1 INTEGRATION
+# LTI 1.3 INTEGRATION (CURRENT STATUS)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -8,167 +8,78 @@
 
 # OVERVIEW:
 
-# LTI (Learning Tools Interoperability) 1.1 allows Canvas to launch your app
+# LTI (Learning Tools Interoperability) is scaffolded as LTI 1.3/OIDC.
 
-# directly from an assignment link. Students click an assignment in Canvas and
+# Public routes are present in routes.ts:
 
-# are automatically authenticated and redirected to the correct assignment in
+# POST /api/lti/init
 
-# your system without a separate login.
+# POST /api/lti/launch
 
-#
-
-# STATUS: Scaffolded and ready — blocked on Canvas consumer key/secret from
-
-# your professor or VT Middleware. Once credentials are obtained:
-
-# 1. Insert an lms_instance record in Adminer with the key/secret
-
-# 2. Register the tool in Canvas with the launch URL
-
-# 3. Test a launch from Canvas
+# GET /api/lti/jwks
 
 #
 
-# LTI 1.1 FLOW:
+# STATUS: Stubbed and awaiting full implementation.
 
-# 1. Instructor configures tool in Canvas:
+# The controller currently redirects with lti_not_implemented errors while
 
-# - Consumer Key: <value from lms_instance.consumer_key>
-
-# - Consumer Secret: <value from lms_instance.consumer_secret>
-
-# - Launch URL: https://webcatmaxxers.discovery.cs.vt.edu/api/lti/launch
-
-# - Privacy: Public (so Canvas sends name and email)
-
-# 2. Student clicks assignment link in Canvas
-
-# 3. Canvas POSTs a signed launch request to POST /api/lti/launch
-
-# 4. Backend validates OAuth HMAC-SHA1 signature using shared secret
-
-# 5. Backend finds or creates user via lti_identity table
-
-# 6. Backend stores grade passback credentials (lis_outcome_service_url,
-
-# lis_result_sourcedid) in lis_result_id table for later use
-
-# 7. Backend issues 24-hour API token
-
-# 8. Backend redirects to frontend: /lti/launch?token=xxx&role=student&...
-
-# 9. When grading completes, backend POSTs score to lis_outcome_service_url
+# the service methods throw intentional stub errors.
 
 #
 
-# CANVAS PARAMETERS SENT ON LAUNCH:
+# REQUIRED FOR COMPLETION (CURRENT APPROACH):
 
-# oauth_consumer_key → identifies which lms_instance to use
+# 1. Configure Canvas Developer Key for LTI 1.3 with init/launch/jwks URLs
 
-# lis_person_contact_email_primary → student email
+# 2. Implement OIDC initiation + state/nonce handling
 
-# lis_person_name_given → first name
+# 3. Implement id_token verification using Canvas JWKS
 
-# lis_person_name_family → last name
+# 4. Provision users from verified claims and issue app token
 
-# lis_result_sourcedid → grade passback token
-
-# lis_outcome_service_url → where to POST grades
-
-# context_id → Canvas course ID
-
-# resource_link_id → Canvas assignment ID
-
-# roles → Learner, Instructor, TeachingAssistant
-
-#
-
-# REQUIRED PACKAGE: ims-lti (npm install ims-lti)
-
-# NOTE: ims-lti has no TypeScript declarations. Use require() not import.
-
-#
-
-# SEED REQUIRED: lms_instance table must have a record with consumer_key and
-
-# consumer_secret before any LTI launch will work. Run in Adminer:
-
-# INSERT INTO lms_instance (consumer_key, consumer_secret, url, lms_type_id)
-
-# VALUES ('your_key', 'your_secret', 'https://canvas.vt.edu', 1);
+# 5. Implement AGS grade passback endpoint integration
 
 FILE: backend/app/services/lti_service.ts
-PURPOSE: Handles all LTI 1.1 Tool Provider functionality. Encapsulates launch
-validation, user provisioning, and grade passback so the controller stays
-clean. All LMS communication goes through this service.
-DESIGN: Three main responsibilities — (1) OAuth signature validation via
-ims-lti Provider, (2) user find-or-create via lti_identity table linking
-LMS user IDs to system users, (3) grade passback via LIS Outcomes Service
-XML POST. The sendGrade() method builds the XML payload manually since
-ims-lti's OutcomeService only works synchronously within the original launch
-request. Async grade passback requires manual OAuth signing which is marked
-as a TODO.
-DEPENDENCIES: ims-lti (require, not import — no TypeScript types available),
-axios, lms_instance.ts, lti_identity.ts, lis_result_id.ts, user.ts
+PURPOSE: Defines the LTI 1.3 service contract and implementation TODOs for OIDC
+initiation, id_token verification, user provisioning, and AGS grade passback.
+DESIGN: Methods are intentional stubs that throw explicit errors until Canvas
+LTI 1.3 implementation is completed. Controller depends on this service and
+handles graceful redirect errors for now.
+DEPENDENCIES: lti_controller.ts, env config, future JWKS/JWT dependencies
 CONSUMERS: lti_controller.ts
-NEXT TEAM NOTES: The sendGrade() method currently sends unsigned XML — it will
-be rejected by Canvas in production. To fix this, install oauth-signature:
-npm install oauth-signature
-Then sign the request using the consumer key/secret before POSTing. This is
-the most important TODO in the LTI implementation. See the comment block in
-sendGrade() for the exact implementation pattern needed.
-The resource_link_id → assignment_offering_id mapping also needs to be
-implemented — Canvas sends a resource_link_id on every launch that identifies
-which Canvas assignment triggered the launch. You need to map this to your
-assignment_offering_id. Consider storing this mapping in a new table or in
-the lti_workout table which already exists for this purpose.
-STATUS: stub [NEEDS INLINE DOCS — sendGrade OAuth signing is blocking for production]
+NEXT TEAM NOTES: Keep launch/init/jwks public routes. Implement OIDC state/nonce,
+JWT verification, claim mapping, and AGS grade passback in this service.
+STATUS: stub [NEEDS INLINE DOCS — complete LTI 1.3 implementation]
 
 # ─────────────────────────────────────────────────────────────────────────────
 
 FILE: backend/app/controllers/lti_controller.ts
-PURPOSE: Handles the two LTI HTTP routes — launch (public) and grade passback
-(protected). The launch route receives Canvas POST requests and orchestrates
-the full LTI flow via LtiService. The grade route is called internally after
-grading completes to send scores back to Canvas.
-DESIGN: The launch route MUST remain public — Canvas POSTs to it directly
-without an existing session token. Security is provided by the OAuth
-HMAC-SHA1 signature validation in LtiService, not by API token auth.
-The grade route is protected by API token because it is called internally
-by your system after grading completes, not by Canvas.
-New LTI users are assigned globalRoleId based on their Canvas role:
-Learner → globalRoleId: 3 (Student)
-Instructor → globalRoleId: 2 (Instructor)
-DEPENDENCIES: lti_service.ts, user.ts, lis_result_id.ts, start/env.ts
+PURPOSE: Handles LTI 1.3 HTTP endpoints (init, launch, jwks, grade) and
+currently returns controlled fallback redirects while service logic is stubbed.
+DESIGN: init/launch/jwks must remain public because Canvas invokes them without
+an existing app session. grade is protected and intended for internal use.
+DEPENDENCIES: lti_service.ts, start/env.ts
 CONSUMERS: routes.ts
-NEXT TEAM NOTES: The resource_link_id → assignment_offering_id mapping is
-currently unimplemented (TODO comment in launch()). When Canvas launches
-your tool from an assignment, resource_link_id identifies which Canvas
-assignment it came from. You need to resolve this to an assignment_offering_id
-in your system to store grade passback credentials correctly.
-The grade() method has a hardcoded Canvas grade passback URL placeholder —
-replace this with the actual lis_outcome_service_url stored during launch
-once the lis_result_id table is being populated correctly.
-STATUS: stub [NEEDS INLINE DOCS — resource_link_id mapping and grade passback URL]
+NEXT TEAM NOTES: Implement the launch success path to issue a real app token and
+redirect frontend with context when OIDC/JWT verification is complete.
+STATUS: stub [NEEDS INLINE DOCS — LTI 1.3 completion]
 
 # ─────────────────────────────────────────────────────────────────────────────
 
 # PENDING TODOS FOR LTI COMPLETION:
 
-# 1. Get consumer key/secret from professor (BLOCKER)
+# 1. Register Canvas LTI 1.3 Developer Key and deployment
 
-# 2. Seed lms_instance with Canvas credentials
+# 2. Implement init state/nonce storage + validation
 
-# 3. Register tool in Canvas with launch URL
+# 3. Implement id_token verification against Canvas JWKS
 
-# 4. Implement resource_link_id → assignment_offering_id mapping
+# 4. Implement user provisioning + identity mapping from LTI claims
 
-# 5. Install oauth-signature and implement async grade passback signing
+# 5. Implement AGS grade passback and lineitem mapping
 
-# 6. Store lis_outcome_service_url on lis_result_id records during launch
-
-# 7. Test full launch → submission → grade passback flow end to end
+# 6. Test full launch → submission → grade passback flow end to end
 
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -256,24 +167,18 @@ STATUS: stub [NEEDS INLINE DOCS — resource_link_id mapping and grade passback 
 
 FILE: .github/workflows/build-images.yml
 PURPOSE: Automatically builds and pushes Docker images to the VT container
-registry on every merge to main. Handles semantic versioning and git tagging.
+registry on every merge to main. Handles semantic versioning, git tagging,
+and automatic rollout restart deployment to Discovery Kubernetes.
 DESIGN: Uses PaulHatch/semantic-version for automated version bumping based on
 commit message patterns — "Feature" bumps minor, "Major" or "!:" bumps major,
-everything else bumps patch. Two jobs are defined: build-backend (active) and
-build-frontend (commented out, ready to uncomment when frontend Dockerfile
-exists). Jobs are intentionally separate so frontend and backend can be built
-independently in the future.
+everything else bumps patch. Backend and frontend images are built and pushed,
+then a deploy job configures kubectl from GitHub secret kubeconfig, restarts
+backend/frontend deployments, and waits for rollout completion.
 DEPENDENCIES: GitHub repository secrets: REGISTRY_USERNAME, REGISTRY_PASSWORD
-(VT container registry credentials — set in GitHub repo Settings → Secrets)
+(VT container registry credentials), DISCOVERY_KUBECONFIG_B64 (base64 kubeconfig)
 CONSUMERS: Kubernetes cluster (pulls images on pod restart)
-NEXT TEAM NOTES: To activate frontend deployment:
-
-1. Create frontend/Dockerfile
-2. Uncomment the build-frontend job in this file
-3. Update the Kubernetes ingress so / routes to frontend and /api to backend
-4. Create a frontend Kubernetes deployment manifest
-   The semantic versioning commit patterns are:
-   "Feature" anywhere in commit message → minor bump (e.g. 1.1.0 → 1.2.0)
-   "Major" or "!:" anywhere in commit → major bump (e.g. 1.2.0 → 2.0.0)
-   anything else → patch bump (e.g. 1.2.0 → 1.2.1)
-   STATUS: complete [frontend job commented out pending frontend Dockerfile]
+NEXT TEAM NOTES: The semantic versioning commit patterns are:
+"Feature" anywhere in commit message → minor bump (e.g. 1.1.0 → 1.2.0)
+"Major" or "!:" anywhere in commit → major bump (e.g. 1.2.0 → 2.0.0)
+anything else → patch bump (e.g. 1.2.0 → 1.2.1)
+STATUS: complete [build, push, and deployment automation enabled]

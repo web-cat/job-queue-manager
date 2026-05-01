@@ -164,7 +164,11 @@ STATUS: complete
 
 # delivered as a single raw SQL file (docs/initial-er-diagram.sql) which has
 
-# been translated into 6 domain-specific Lucid schema builder migrations.
+# has been translated into multiple Lucid migrations (currently 10 files),
+
+# including domain schema, seed/reference data, and integration cleanup/update
+
+# migrations.
 
 #
 
@@ -1262,7 +1266,7 @@ STATUS: complete
 
 # backend/app/models/lms_instance.ts
 
-# — Explain consumer_key/secret, LTI 1.1 vs 1.3 implications
+# — Explain legacy consumer_key/secret fields and current LTI 1.3 stub status
 
 # backend/database/migrations/1770829437463_create_exercises_and_prompts.ts
 
