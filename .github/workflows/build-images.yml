@@ -133,7 +133,8 @@ jobs:
       - name: verify kubernetes access
         run: |
           kubectl config current-context
-          kubectl cluster-info
+          kubectl get deployment/backend -n 22012-job-queue-manager
+          kubectl get deployment/frontend -n 22012-job-queue-manager
 
       - name: rollout backend and frontend deployments
         run: |

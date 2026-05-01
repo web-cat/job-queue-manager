@@ -128,7 +128,12 @@ export const useAuthStore = defineStore(
         }
       }
       clearAuth();
-      await navigateTo("/login");
+
+      if (import.meta.client) {
+        window.location.assign(`${config.public.apiBase}/api/auth/cas/logout`);
+      } else {
+        await navigateTo("/login");
+      }
     }
 
     return {
