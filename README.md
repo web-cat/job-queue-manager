@@ -4,16 +4,16 @@ A full-stack job queue management system built for the VT CS department. Student
 
 ## Tech Stack
 
-| Layer          | Technology                        |
-| -------------- | --------------------------------- |
-| Language       | TypeScript (full stack)           |
-| Backend        | AdonisJS v6                       |
-| Frontend       | Nuxt 4 + Nuxt UI                  |
-| Database       | PostgreSQL                        |
-| Auth           | VT CAS SSO + LTI 1.1              |
-| Monorepo       | pnpm workspaces                   |
-| Infrastructure | Kubernetes (VT Discovery cluster) |
-| Object Storage | MinIO (S3-compatible)             |
+| Layer          | Technology                               |
+| -------------- | ---------------------------------------- |
+| Language       | TypeScript (full stack)                  |
+| Backend        | AdonisJS v6                              |
+| Frontend       | Nuxt 4 + Nuxt UI                         |
+| Database       | PostgreSQL                               |
+| Auth           | VT CAS SSO + LTI 1.3 (stub) + local auth |
+| Monorepo       | pnpm workspaces                          |
+| Infrastructure | Kubernetes (VT Discovery cluster)        |
+| Object Storage | MinIO (S3-compatible)                    |
 
 ## Architecture
 
@@ -49,7 +49,7 @@ job-queue-manager/
 │   │   ├── models/           # 57 Lucid models (full legacy schema)
 │   │   └── services/         # cas_service, lti_service, job_queue_service, object_storage_service
 │   ├── database/
-│   │   └── migrations/       # 7 migrations including seed data
+│   │   └── migrations/       # 10 migrations (schema + seed + integration updates)
 │   ├── tests/
 │   │   └── functional/       # Japa functional tests (auth, assignments, courses, submissions, minio)
 │   ├── start/
@@ -71,7 +71,7 @@ job-queue-manager/
 │   └── workflows/
 │       ├── build-images.yml  # CI/CD — builds and pushes Docker images on merge to main
 │       └── run-tests.yml     # CI — runs backend test suite on push to dev and PRs
-├── DOCUMENTATION.md          # Full file-level documentation
+├── docs/documentation.md     # Full file-level documentation
 ├── pnpm-workspace.yaml
 ├── package.json
 └── compose.yaml
@@ -313,10 +313,16 @@ DELETE /api/auth/logout    → revoke token
 GET /api/auth/me           → get current user
 ```
 
-### LTI 1.1
+### LTI 1.3
 
-Scaffolded and ready — waiting on Canvas consumer key/secret from VT Middleware.
-Launch URL: `https://webcatmaxxers.discovery.cs.vt.edu/api/lti/launch`
+LTI is scaffolded as LTI 1.3 and not fully implemented yet.
+Implemented public routes:
+
+`POST /api/lti/init`
+`POST /api/lti/launch`
+`GET /api/lti/jwks`
+
+Current behavior redirects with an `lti_not_implemented` error until full OIDC/JWT validation and grade passback are completed.
 
 ---
 
@@ -329,8 +335,9 @@ All protected routes require `Authorization: Bearer <token>` header.
 | GET      | `/api/auth/cas`               | Public | CAS login redirect       |
 | POST     | `/api/auth/login`             | Public | Local login              |
 | POST     | `/api/auth/register`          | Public | Register local account   |
+| POST     | `/api/lti/init`               | Public | LTI OIDC initiation      |
 | POST     | `/api/lti/launch`             | Public | LTI launch from Canvas   |
-| POST     | `/api/submissions/webhook`    | Public | Results from other team  |
+| GET      | `/api/lti/jwks`               | Public | LTI public JWK set       |
 | GET      | `/api/auth/me`                | Token  | Current user             |
 | GET/POST | `/api/submissions`            | Token  | List/create submissions  |
 | GET      | `/api/submissions/:id/result` | Token  | Grading result           |
@@ -340,6 +347,7 @@ All protected routes require `Authorization: Bearer <token>` header.
 | PATCH    | `/api/users/:id/role`         | Admin  | Update user role         |
 | GET/POST | `/api/terms`                  | Admin  | List/create terms        |
 | GET      | `/api/submission-policies`    | Admin  | List submission policies |
+| POST     | `/api/v1/submissions/webhook` | HMAC   | Results from other team  |
 
 ---
 
@@ -352,11 +360,7 @@ The CI/CD pipeline deploys automatically on merge to `main`.
 1. Merge feature branch → `dev` → `main` (via PR)
 2. GitHub Actions runs tests — merge blocked if tests fail
 3. GitHub Actions builds and pushes Docker images to `container.cs.vt.edu`
-4. Restart pods to pull new images:
-   ```bash
-   kubectl rollout restart deployment/backend -n 22012-job-queue-manager
-   kubectl rollout restart deployment/frontend -n 22012-job-queue-manager
-   ```
+4. GitHub Actions automatically restarts backend/frontend deployments and waits for rollout success
 5. Run migrations if schema changed:
    ```bash
    kubectl exec -it deployment/backend -n 22012-job-queue-manager -- node ace migration:run
@@ -544,4 +548,4 @@ kubectl patch secret backend-env -n 22012-job-queue-manager \
 
 ## Documentation
 
-Full file-level documentation is in `DOCUMENTATION.md` at the project root. It covers every file's purpose, design decisions, dependencies, and notes for future developers.
+Full file-level documentation is in `docs/documentation.md`. It covers every file's purpose, design decisions, dependencies, and notes for future developers.
