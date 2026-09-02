@@ -1,47 +1,4 @@
-Listed directory job-queue-manager
-Viewed package.json:1-40
-Viewed pnpm-workspace.yaml:1-24
-Viewed README.md:1-150
-Listed directory packages
-Listed directory cli
-Listed directory docs
-Viewed README.md:151-300
-Viewed README.md:301-450
-Viewed README.md:451-552
-Listed directory backend
-Listed directory frontend
-Viewed nuxt.config.ts:1-85
-Listed directory app
-Listed directory pages
-Viewed README.md:1-97
-Listed directory app
-Viewed routes.ts:1-150
-Viewed routes.ts:151-178
-Viewed documentation.md:1-100
-Viewed documentation.md:1200-1278
-Viewed api_endpoints_execution_service.md:1-60
-Viewed job_queue_service.ts:1-100
-Viewed job_queue_service.ts:101-250
-Viewed job_queue_service.ts:251-345
-Listed directory models
-Listed directory controllers
-Listed directory services
-Listed directory middleware
-Listed directory policies
-Listed directory migrations
-Listed directory stores
-Listed directory composables
-Listed directory middleware
-Listed directory admin
-Listed directory submissions
-Listed directory assignments
-Listed directory courses
-Listed directory auth
-Listed directory lti
-Listed directory layouts
-Viewed useApi.ts:1-97
-Listed directory workflows
-Listed directory .devcontainer
+# Project Overview
 
 Welcome to the **Job Queue Manager** project! This orientation guide is designed to help you quickly understand what the system does, how its layers interact, how the repository is structured, and how to navigate day-to-day development.
 
